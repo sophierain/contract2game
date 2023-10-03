@@ -1,0 +1,79 @@
+{
+  "contracts": [
+    {
+      "behaviors": [],
+      "constructor": {
+        "contract": "Modest",
+        "initial storage": [
+          {
+            "location": {
+              "item": {
+                "var": "Modest.x"
+              },
+              "sort": "int"
+            },
+            "value": "1"
+          },
+          {
+            "location": {
+              "item": {
+                "var": "Modest.y"
+              },
+              "sort": "int"
+            },
+            "value": "Caller"
+          }
+        ],
+        "interface": "Modest()",
+        "invariants": [],
+        "kind": "Constructor",
+        "postConditions": [],
+        "preConditions": [
+          {
+            "args": [
+              {
+                "args": [
+                  "0",
+                  "Caller"
+                ],
+                "arity": 2,
+                "symbol": "<="
+              },
+              {
+                "args": [
+                  "Caller",
+                  "1461501637330902918203684832716283019655932542975"
+                ],
+                "arity": 2,
+                "symbol": "<="
+              }
+            ],
+            "arity": 2,
+            "symbol": "and"
+          }
+        ]
+      },
+      "kind": "Contract"
+    }
+  ],
+  "kind": "Program",
+  "store": {
+    "kind": "Storages",
+    "storages": {
+      "Modest": {
+        "x": [
+          {
+            "type": "uint256"
+          },
+          0
+        ],
+        "y": [
+          {
+            "type": "address"
+          },
+          1
+        ]
+      }
+    }
+  }
+}

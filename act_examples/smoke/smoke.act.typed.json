@@ -1,0 +1,64 @@
+{
+  "contracts": [
+    {
+      "behaviors": [
+        {
+          "case": [
+            "True"
+          ],
+          "contract": "A",
+          "interface": "f(uint256 x)",
+          "kind": "Behaviour",
+          "name": "f",
+          "postConditions": [],
+          "preConditions": [
+            {
+              "args": [
+                {
+                  "args": [
+                    "0",
+                    "x"
+                  ],
+                  "arity": 2,
+                  "symbol": "<="
+                },
+                {
+                  "args": [
+                    "x",
+                    "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                  ],
+                  "arity": 2,
+                  "symbol": "<="
+                }
+              ],
+              "arity": 2,
+              "symbol": "and"
+            }
+          ],
+          "returns": {
+            "expression": "1",
+            "sort": "int"
+          },
+          "stateUpdates": []
+        }
+      ],
+      "constructor": {
+        "contract": "A",
+        "initial storage": [],
+        "interface": "A()",
+        "invariants": [],
+        "kind": "Constructor",
+        "postConditions": [],
+        "preConditions": []
+      },
+      "kind": "Contract"
+    }
+  ],
+  "kind": "Program",
+  "store": {
+    "kind": "Storages",
+    "storages": {
+      "A": {}
+    }
+  }
+}

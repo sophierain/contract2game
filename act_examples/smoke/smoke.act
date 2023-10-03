@@ -1,0 +1,4 @@
+behaviour f of A
+interface f(uint x)
+
+returns 1
