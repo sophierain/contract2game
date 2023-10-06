@@ -44,8 +44,25 @@ def mul(left: Real, right: Real) -> Real:
         return right
     elif type(right) == float and right == 1:
         return left
+    elif type(right) == float and right == 0:
+        return 0
+    elif type(left) == float and left == 0:
+        return 0
     else:
         result = left * right
+        # satisfy linter for some reason
+        assert isinstance(result, float) or isinstance(result, z3.ArithRef)
+        return result
+
+def div(left: Real, right: Real) -> Real:
+    """
+    return left / right, except if right is 1
+    """
+
+    if type(right) == float and right == 1:
+        return left
+    else:
+        result = left / right
         # satisfy linter for some reason
         assert isinstance(result, float) or isinstance(result, z3.ArithRef)
         return result
@@ -98,11 +115,59 @@ class Utility:
         return self._binary_expression(other, flip(sub))
 
     def __mul__(self, other: Union[int, float, Utility]) -> Utility:
-        return self._binary_expression(other, mul)
+        """(x, a)*(y, b) = (xy, xa + yb + ab) ignores infinitesimals of order 2 """
+      
+        if isinstance(other, int) or isinstance(other, float):
+            other = Utility.from_real(other)
+
+        return   Utility(
+            mul(self.real, other.real),
+            add(mul(self.real, other.inf), mul(other.real,self.inf))
+            )
+        
 
     def __rmul__(self, other: Union[int, float, Utility]) -> Utility:
         """useful when parsing e.g. 2 * p"""
-        return self._binary_expression(other, flip(mul))
+
+        if isinstance(other, int) or isinstance(other, float):
+            other = Utility.from_real(other)
+
+        return   Utility(
+            mul(self.real, other.real),
+            add(mul(self.real, other.inf), mul(other.real,self.inf))
+            )
+
+    def __truediv__(self, other: Union[int, float, Utility]) -> Utility:
+        """(x, a)/(y, b) = (z,c), where (z,c)*(y,b)=(x,a) ignores infinitesimals of order 2"""
+      
+        if isinstance(other, int) or isinstance(other, float):
+            other = Utility.from_real(other)
+
+        return   Utility(
+            div(self.real,other.real),
+            div(sub(self.inf, mul(other.inf, div(self.real, other.real))), other.real)
+            )
+
+    def __rtruediv__(self, other: Union[int, float, Utility]) -> Utility: #ask michael
+        """(x, a)/(y, b) = (z,c), where (z,c)*(y,b)=(x,a)"""
+      
+        if isinstance(other, int) or isinstance(other, float):
+            other = Utility.from_real(other)
+
+        return   Utility(
+            div(other.real,self.real),
+            div(sub(other.inf, mul(self.inf, div(other.real, self.real))), self.real)
+            )
+    
+
+    def __pow__(self, other: Union[int, float]) -> Utility:
+        """only real exponentiation, no utilities"""
+
+        return Utility(
+            pow(self.real, other),
+            mul(mul(other, pow(self.real, other -1)), self.inf)
+            )
+
 
     def __eq__(
             self,

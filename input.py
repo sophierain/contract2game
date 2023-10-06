@@ -11,35 +11,111 @@ from constants import CONSTRAINT_FUNS
 from utility import Utility
 
 
+def load_constraint(source: Union(dict, str))-> Union(Boolean, Utility):
+        if isinstance(source, str):
+            return Utility.from_name(source, True)
+
+        else:
+            list_of_expressions = []
+            print(source)
+            if "args" in source.keys():
+                for expr in source["args"]:#how does the pre thing work there
+                    list_of_expressions.append(load_constraint(expr))
+
+                return apply_symbol(list_of_expressions, source["symbol"])
+            elif "Pre" in source.keys():
+                return load_constraint(source["Pre"]["item"])
+            elif "Post" in source.keys():
+                return load_constraint(source["Post"]["item"])
+
+def apply_symbol(list_of_expressions: List, symbol: str)-> Union(Boolean, Utility):
+        if symbol == "+":
+            return list_of_expressions[0] + list_of_expressions[1]
+        elif symbol == "-":
+            return list_of_expressions[0] - list_of_expressions[1]
+        elif symbol == "*":
+            return list_of_expressions[0] * list_of_expressions[1] #ignores double infinitesimals
+        elif symbol == "/":
+            return list_of_expressions[0] / list_of_expressions[1] #ignores double infinitesimals
+        elif symbol == "^":
+            return list_of_expressions[0] ** list_of_expressions[1] #ignores double infinitesimals, only real exponents allowed
+
+        # elif symbol == "litint":
+        #     return list_of_expressions[0] 
+        # elif symbol == "intmin": 
+        #     return -2 ** (list_of_expressions[0] -1)
+        # elif symbol == "intmax":
+        #     return 2 ** (list_of_expressions[0] -1) -1
+        # elif symbol == "uintmin":
+        #     return 0
+        # elif symbol == "uintmax":
+        #     return 2 ** list_of_expressions[0] -1
+        elif symbol == "inrange": #arity 2; type and value
+            pass #format issue if expression is not a variable of numeric value
+        # elif symbol == "intenv":
+        #     pass 
+        elif symbol == "ite":
+            to_be_conjoint = tuple(z3.Implies(list_of_expressions[0],list_of_expressions[1]), z3.Implies(z3.Not(list_of_expressions[0]),list_of_expressions[2]))
+            return z3.And(*to_be_conjoint)
+
+
+        elif symbol == "and":
+            return z3.And(*list_of_expressions)
+        elif symbol == "or":
+            return z3.Or(*list_of_expressions)
+        elif symbol == "<":
+            return list_of_expressions[0] < list_of_expressions[1]
+        elif symbol == ">":
+            return list_of_expressions[0] > list_of_expressions[1]
+        elif symbol == "=>":
+            return z3.Implies(list_of_expressions[0],list_of_expressions[1])
+        elif symbol == "=/=":
+            return z3.Not(list_of_expressions[0]==list_of_expressions[1])
+        elif symbol == "==":
+            return list_of_expressions[0]==list_of_expressions[1]
+        elif symbol == "<=":
+            return list_of_expressions[0] <= list_of_expressions[1]
+        elif symbol == ">=":
+            return list_of_expressions[0] >= list_of_expressions[1]
+        # elif symbol == "LitBool": #???
+        #     pass
+        elif symbol == "not":
+            return z3.Not(list_of_expressions[0])
+
+
+
+
 class Behavior:
     """one function within a contract in a given case"""
     name: str
     case: List[Boolean]
     preConditions: List[Boolean]
     postConditions: List[Boolean]
-    returnValue: Any #what return types are valid in act?
+    returnValue: Any #z3 expression, to be parsed similar to constraints
+    returnType: Any
     stateUpdates: List[Any] #how are state updates specified?
 
     def __init__(self, behavior: Dict[str, Any]):
+        #assert(behavior["kind"]=="Behavior")
         self.name = behavior["name"]
         self.case = [
-            self.load_constraint(elem) 
+            load_constraint(elem) 
             for elem in behavior["case"]
         ]
         self.preConditions = [
-            self.load_constraint(elem) 
+            load_constraint(elem) 
             for elem in behavior["preConditions"]
         ]
         self.postConditions = [
-            self.load_constraint(elem)
+            load_constraint(elem)
             for elem in behavior["postConditions"]
         ]
+        
+        self.returnValue = load_constraint(behavior["returns"]["expression"])
+        self.returnType = eval(behavior["returns"]["sort"])
+        
 
-        value = eval(behavior["returns"]["expresssion"])
-        sort = eval(behavior["returns"]["sort"])
-        self.returnValue = sort(value)
-
-        self.stateUpdates = [elem for elem in behavior["stateUpdates"]]
+        self.stateUpdates = [self.load_update(elem) for elem in behavior["stateUpdates"]]
 
     def __repr__(self) -> str:
         return (
@@ -48,35 +124,13 @@ class Behavior:
             f"preConditions: {self.preConditions}\n"
             f"postConditions: {self.postConditions}\n"
             f"returnValue: {self.returnValue}\n"
+            f"returnType: {self.returnType}\n"
             f"stateUpdates: {self.stateUpdates}\n"
         )
 
-    def translate_constraint(self, source: Union(Dict, str)) -> (str, Dict[str, Utility]):
-    
-        if type(source) == dict:
-            assert(source["arity"] == 2)
-            left_arg, left_constants = self.translate_constraint(source["args"][0]) 
-            right_arg, right_constants = self.translate_constraint(source["args"][1])
-            symbol = source["symbol"]
-            merged_constants = {key: value for key, value in left_constants.items()}
-            merged_constants.update(right_constants)
-            return "( " + left_arg + " " + symbol + " " + right_arg + " )", merged_constants
-        else:
-            # map from names to Utility, used for eval() later
-            constant_dict = {
-                constant: Utility.from_name(constant, real)
-                for constant, real in
-                itertools.chain(
-                    ((constant, True) for constant in [source])
-                )
-            }
-            return source, constant_dict
+    def load_update(self, update: Dict) -> Any:
+        pass
 
-
-    def load_constraint(self, source: Dict) -> Boolean:
-        """load a string expression into a Boolean constraint, via `eval()`"""
-        name, constants = self.translate_constraint(source)
-        return eval(name, CONSTRAINT_FUNS, constants)
 
 
 
@@ -87,17 +141,18 @@ class Constructor:
     postConditions: List[Boolean]
 
     def __init__(self, constructor: Dict[str, Any]):
+        assert(constructor["kind"]=="Constructor")
         self.initial_storage = constructor["initial storage"]
         self.invariants = [
-            self.load_constraint(constraint)
+            load_constraint(constraint)
             for constraint in constructor["invariants"]
         ]
         self.preConditions = [
-            self.load_constraint(constraint)
+            load_constraint(constraint)
             for constraint in constructor["preConditions"]
         ]        
         self.postConditions = [
-            self.load_constraint(constraint)
+            load_constraint(constraint)
             for constraint in constructor["postConditions"]
         ]
 
@@ -109,26 +164,6 @@ class Constructor:
             f"postConditions: {self.postConditions}\n"
         )
 
-    def translate_constraint(self, source: Union(Dict, str)) -> (str, Dict):
-    
-        if type(source) == Dict:
-            assert(source["arity"] == 2)
-            left_arg, left_constants = self.translate_constraint(source["args"][0]) 
-            right_arg, right_constants = self.translate_constraint(source["args"][1])
-            symbol = source["symbol"]
-            merged_constants = {key: value for key, value in left_constants.items()}
-            merged_constants.update(right_constants)
-            return "( " + left_arg + " " + symbol + " " + right_arg + " )", merged_constants
-        else:
-            return source, {source: Utility.from_name(source, True)}
-
-
-    def load_constraint(self, source: Dict) -> Boolean:
-        """load a string expression into a Boolean constraint, via `eval()`"""
-        name, constants = self.translate_constraint(source)
-        return eval(name, CONSTRAINT_FUNS, constants)
-
-
 
 
 class Contract:
@@ -137,11 +172,12 @@ class Contract:
     constructor: Constructor
 
     def __init__(self, contract: Dict[str, Any]):
+        assert(contract["kind"]=="Contract")
         self.constructor = Constructor(contract["constructor"])
-        self.behavior = [Behavior(elem) for elem in contract["behaviors"]]
+        self.behaviors = [Behavior(elem) for elem in contract["behaviors"]]
 
     def __repr__(self) -> str:
         return (
-            f"behaviors: {self.behaviors}\n" 
-            f"constructor: {self.constructor}\n"
+            f"behaviors:\n {self.behaviors}\n" 
+            f"constructor:\n {self.constructor}\n"
         )
