@@ -290,11 +290,12 @@ class StorageItem(Exp):
     item: StorageLoc
     time: Timing
 
-    def __init__(self, loc: StorageLoc):
+    def __init__(self, item: StorageLoc, time: Timing):
         self.item = item
+        self.time = time
 
     def __repr__(self) -> str:
-        return f"StorageVar({self.item})"
+        return f"StorageVar({self.item}, {self.time})"
 
 
 # --- Storage ---
