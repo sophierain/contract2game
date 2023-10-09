@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 import itertools
 import json
-from input import Contract
+from act_ast import Contract, LitBool, And
 
 from typing import Any, Dict, Iterable, List, Union
 import z3
@@ -18,13 +18,19 @@ import z3
 #path = "act_examples/smoke/smoke.act.typed.json"
 #path = "act_examples/token/transfer.act.typed.json"
 from sys import argv
-path = argv[1]
+# path = argv[1]
 
-obj = json.load(open(path))
+# obj = json.load(open(path))
 
-contracts = obj["contracts"]
+# contracts = obj["contracts"]
 
-considered_contract = Contract(contracts[0])
+# considered_contract = Contract(contracts[0])
 
-print(considered_contract)
+# print(considered_contract)
+
+x=LitBool(True)
+y=And(x, x)
+
+z = And(LitBool(True), LitBool(True))
     
+print(z)

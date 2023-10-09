@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
+from dataclasses import dataclass
 import itertools
 import json
 
@@ -11,7 +12,9 @@ from constants import CONSTRAINT_FUNS
 from utility import Utility
 
 
-def load_constraint(source: Union(dict, str))-> Union(Boolean, Utility):
+#the directly to z3 code:
+
+def load_smtconstraint(source: Union(dict, str))-> Union(Boolean, Utility):
         if isinstance(source, str):
             return Utility.from_name(source, True)
 
@@ -20,15 +23,15 @@ def load_constraint(source: Union(dict, str))-> Union(Boolean, Utility):
             print(source)
             if "args" in source.keys():
                 for expr in source["args"]:#how does the pre thing work there
-                    list_of_expressions.append(load_constraint(expr))
+                    list_of_expressions.append(load_smtconstraint(expr))
 
-                return apply_symbol(list_of_expressions, source["symbol"])
+                return apply_smtsymbol(list_of_expressions, source["symbol"])
             elif "Pre" in source.keys():
-                return load_constraint(source["Pre"]["item"])
+                return load_smtconstraint(source["Pre"]["item"])
             elif "Post" in source.keys():
-                return load_constraint(source["Post"]["item"])
+                return load_smtconstraint(source["Post"]["item"])
 
-def apply_symbol(list_of_expressions: List, symbol: str)-> Union(Boolean, Utility):
+def apply_smtsymbol(list_of_expressions: List, symbol: str)-> Union(Boolean, Utility):
         if symbol == "+":
             return list_of_expressions[0] + list_of_expressions[1]
         elif symbol == "-":
@@ -85,37 +88,36 @@ def apply_symbol(list_of_expressions: List, symbol: str)-> Union(Boolean, Utilit
 
 
 
-class Behavior:
+class SMTBehavior:
     """one function within a contract in a given case"""
     name: str
     case: List[Boolean]
     preConditions: List[Boolean]
     postConditions: List[Boolean]
-    returnValue: Any #z3 expression, to be parsed similar to constraints
-    returnType: Any
-    stateUpdates: List[Any] #how are state updates specified?
+    returnValue: Union(Boolean, z3.Int) #z3 expression, to be parsed similar to constraints
+    stateUpdates: List[Boolean] #equality constraints e.g. update
 
     def __init__(self, behavior: Dict[str, Any]):
         #assert(behavior["kind"]=="Behavior")
         self.name = behavior["name"]
         self.case = [
-            load_constraint(elem) 
+            load_smtconstraint(elem) 
             for elem in behavior["case"]
         ]
         self.preConditions = [
-            load_constraint(elem) 
+            load_smtconstraint(elem) 
             for elem in behavior["preConditions"]
         ]
         self.postConditions = [
-            load_constraint(elem)
+            load_smtconstraint(elem)
             for elem in behavior["postConditions"]
         ]
         
-        self.returnValue = load_constraint(behavior["returns"]["expression"])
+        self.returnValue = load_smtconstraint(behavior["returns"]["expression"])
         self.returnType = eval(behavior["returns"]["sort"])
         
 
-        self.stateUpdates = [self.load_update(elem) for elem in behavior["stateUpdates"]]
+        self.stateUpdates = [self.load_smtupdate(elem) for elem in behavior["stateUpdates"]]
 
     def __repr__(self) -> str:
         return (
@@ -128,13 +130,13 @@ class Behavior:
             f"stateUpdates: {self.stateUpdates}\n"
         )
 
-    def load_update(self, update: Dict) -> Any:
+    def load_smtupdate(self, update: Dict) -> Any:
         pass
 
 
 
 
-class Constructor:
+class SMTConstructor:
     initial_storage: List[Any]
     invariants: List[Boolean] 
     preConditions: List[Boolean]
@@ -144,15 +146,15 @@ class Constructor:
         assert(constructor["kind"]=="Constructor")
         self.initial_storage = constructor["initial storage"]
         self.invariants = [
-            load_constraint(constraint)
+            load_smtconstraint(constraint)
             for constraint in constructor["invariants"]
         ]
         self.preConditions = [
-            load_constraint(constraint)
+            load_smtconstraint(constraint)
             for constraint in constructor["preConditions"]
         ]        
         self.postConditions = [
-            load_constraint(constraint)
+            load_smtconstraint(constraint)
             for constraint in constructor["postConditions"]
         ]
 
@@ -166,15 +168,15 @@ class Constructor:
 
 
 
-class Contract:
+class SMTContract:
     """input data"""
-    behaviors: List[Behavior]
-    constructor: Constructor
+    behaviors: List[SMTBehavior]
+    constructor: SMTConstructor
 
     def __init__(self, contract: Dict[str, Any]):
         assert(contract["kind"]=="Contract")
-        self.constructor = Constructor(contract["constructor"])
-        self.behaviors = [Behavior(elem) for elem in contract["behaviors"]]
+        self.constructor = SMTConstructor(contract["constructor"])
+        self.behaviors = [SMTBehavior(elem) for elem in contract["behaviors"]]
 
     def __repr__(self) -> str:
         return (
