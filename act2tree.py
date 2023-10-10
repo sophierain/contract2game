@@ -10,6 +10,8 @@ from abc import ABCMeta, abstractmethod
 import itertools
 import json
 from act_ast import Contract, LitBool, And
+from parse_act import parse_act_json
+
 
 from typing import Any, Dict, Iterable, List, Union
 import z3
@@ -18,11 +20,16 @@ import z3
 #path = "act_examples/smoke/smoke.act.typed.json"
 #path = "act_examples/token/transfer.act.typed.json"
 from sys import argv
-# path = argv[1]
+path = argv[1]
 
-# obj = json.load(open(path))
+obj = json.load(open(path))
 
-# contracts = obj["contracts"]
+
+
+
+act = parse_act_json(obj)
+
+
 
 # considered_contract = Contract(contracts[0])
 

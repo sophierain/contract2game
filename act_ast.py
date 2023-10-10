@@ -16,7 +16,6 @@ from utility import Utility
 class Exp(metaclass=ABCMeta):
     """base class for expressions"""
 
-
 class IntExp(Exp, metaclass=ABCMeta):
     """integer expressions"""
 
@@ -27,6 +26,9 @@ class BoolExp(Exp, metaclass=ABCMeta):
 class LitBool(BoolExp):
     value: bool
 
+@dataclass
+class VarBool(BoolExp):
+    name: str
 
 @dataclass
 class And(BoolExp):
@@ -40,32 +42,28 @@ class Or(BoolExp):
     left: BoolExp
     right: BoolExp
 
+@dataclass
 class Not(BoolExp):
     """Negation of a boolean expression"""
     value: BoolExp
 
-   
-    def __init__(self, value: BoolExp):
-        """not value"""
-        self.value = value
-
-    def __repr__(self):
-        return f"Not({self.value})"
-
-
+@dataclass
 class Implies(BoolExp):
     """implication of two boolean expressions"""
     left: BoolExp
     right: BoolExp
 
-   
-    def __init__(self, left: BoolExp, right: BoolExp):
-        """left or right"""
-        self.left = left
-        self.right = right
+@dataclass
+class ITEInt(IntExp):
+    condition: BoolExp
+    left: IntExp
+    right: IntExp
 
-    def __repr__(self):
-        return f"Implies({self.left}, {self.right})"
+@dataclass
+class ITEBool(BoolExp):
+    condition: BoolExp
+    left: BoolExp
+    right: BoolExp
 
 class Eq(BoolExp):
     left: Exp
@@ -83,147 +81,69 @@ class Eq(BoolExp):
         return f"Eq({self.left}, {self.right})" 
 
 # arithmetic
+@dataclass
 class LitInt(IntExp):
     value: int
 
-    def __init__(self, value: int):
-        """just an integer"""
-        self.value = value
- 
+@dataclass
+class VarInt(IntExp):
+    name: str
 
-    def __repr__(self):
-        return f"LitInt({self.value})"
-
+@dataclass
 class Add(IntExp):
     """addition of two integer expressions"""
     left: IntExp
     right: IntExp
 
-   
-    def __init__(self, left: IntExp, right: IntExp):
-        """left plus right"""
-        self.left = left
-        self.right = right
-
-    def __repr__(self):
-        return f"Add({self.left}, {self.right})"
-    
+@dataclass 
 class Sub(IntExp):
     """subtraction of two integer expressions"""
     left: IntExp
     right: IntExp
 
-   
-    def __init__(self, left: IntExp, right: IntExp):
-        """left minus right"""
-        self.left = left
-        self.right = right
-
-    def __repr__(self):
-        return f"Sub({self.left}, {self.right})"
-
+@dataclass
 class Mul(IntExp):
     """multiplication of two integer expressions"""
     left: IntExp
     right: IntExp
 
-   
-    def __init__(self, left: IntExp, right: IntExp):
-        """left times right"""
-        self.left = left
-        self.right = right
-
-    def __repr__(self):
-        return f"Mul({self.left}, {self.right})"
-
-
+@dataclass
 class Div(IntExp):
     """division of two integer expressions"""
     left: IntExp
     right: IntExp
 
-   
-    def __init__(self, left: IntExp, right: IntExp):
-        """left divided by right"""
-        self.left = left
-        self.right = right
-
-    def __repr__(self):
-        return f"Div({self.left}, {self.right})"
-
 
 # relations of IntBool
+@dataclass
 class Lt(BoolExp):
     """less than comparison of two integer expressions"""
     left: IntExp
     right: IntExp
 
-   
-    def __init__(self, left: IntExp, right: IntExp):
-        """left < right"""
-        self.left = left
-        self.right = right
-
-    def __repr__(self):
-        return f"Lt({self.left}, {self.right})"
-
+@dataclass
 class Le(BoolExp):
     """less than or equal comparison of two integer expressions"""
     left: IntExp
     right: IntExp
 
-   
-    def __init__(self, left: IntExp, right: IntExp):
-        """left <= right"""
-        self.left = left
-        self.right = right
-
-    def __repr__(self):
-        return f"Le({self.left}, {self.right})"
-
+@dataclass
 class Gt(BoolExp):
     """greater than comparison of two integer expressions"""
     left: IntExp
     right: IntExp
 
-   
-    def __init__(self, left: IntExp, right: IntExp):
-        """left >= right"""
-        self.left = left
-        self.right = right
-
-    def __repr__(self):
-        return f"Gt({self.left}, {self.right})"
-
+@dataclass
 class Ge(BoolExp):
     """greater than or equal comparison of two integer expressions"""
     left: IntExp
     right: IntExp
 
-   
-    def __init__(self, left: IntExp, right: IntExp):
-        """left >= right"""
-        self.left = left
-        self.right = right
-
-    def __repr__(self):
-        return f"Ge({self.left}, {self.right})"
-
-
+@dataclass
 class Neq(BoolExp):
     """inequality of two integer expressions"""
     left: IntExp
     right: IntExp
-
-   
-    def __init__(self, left: IntExp, right: IntExp):
-        """left != right"""
-        self.left = left
-        self.right = right
-
-    def __repr__(self):
-        return f"Neq({self.left}, {self.right})"
-    
 
 # mappings and stuff
 class ActTy(metaclass=ABCMeta):
@@ -241,61 +161,39 @@ class BoolTy(ActTy):
     def __repr__(self) -> str:
         return "BoolTy"
 
+@dataclass
 class Decl:
     name: str
     ty: ActTy
 
-    def __init__(self, name: str, ty: ActTy):
-        self.name = name
-        self.ty = ty
-
-    def __repr__(self) -> str:
-        return f"Decl({self.name}, {self.ty})"
-
+@dataclass
 class Interface:
     name: str
     args: List[Decl]
 
-    def __init__(self, name: str, args: List[Decl]):
-        self.name = name
-        self.args = args
-    
-    def __repr__(self) -> str:
-        return f"Interface({self.name}, {self.args})"
     
 # --- Variables ---
 
-class Var(Exp):
-    """A reference to a calldata variable"""
-    name: str
+# @dataclass
+# class Var(Exp):
+#     """A reference to a calldata variable"""
+#     name: str
 
-    def __init__(self, name: str):
-        self.name = name
-
-    def __repr__(self) -> str:
-        return f"Var({self.name})"
-    
-class EnvVar(IntExp):
+@dataclass  
+class EnvVarInt(IntExp):
     """A reference to an environment variable (e.g. msg.sender)"""
     name: str
 
-    def __init__(self, name: str):
-        self.name = name
+@dataclass  
+class EnvVarBool(BoolExp):
+    """A reference to an environment variable (e.g. msg.sender)"""
+    name: str
 
-    def __repr__(self) -> str:
-        return f"EnvVar({self.name})"
-    
+@dataclass    
 class StorageItem(Exp):
     """This is TItem in TimeAgnostic.hs"""
     item: StorageLoc
     time: Timing
-
-    def __init__(self, item: StorageLoc, time: Timing):
-        self.item = item
-        self.time = time
-
-    def __repr__(self) -> str:
-        return f"StorageVar({self.item}, {self.time})"
 
 
 # --- Storage ---
@@ -303,17 +201,18 @@ class StorageItem(Exp):
 class Timing(metaclass=ABCMeta):
     """Is the storage varaible refering to the pre or post state"""
 
+@dataclass
 class Pre(Timing):
     """Prestate"""
 
+@dataclass
 class Post(Timing):
     """Poststate"""
 
-    
 class StorageLoc(metaclass=ABCMeta):
     """A reference to an item in storage"""
 
-
+@dataclass
 class VarLoc(StorageLoc):
     """The base variable reference type
        This can either be a value type, or the base of a longer chain of e.g. MappingLoc / ContractLoc expressions
@@ -321,13 +220,7 @@ class VarLoc(StorageLoc):
     contract: str
     name: str
 
-    def __init__(self, contract: str, name: str):
-        self.contract = contract
-        self.name = name
-
-    def __repr__(self) -> str:
-        return f"VarLoc({self.contract}, {self.name})"
-    
+@dataclass    
 class MappingLoc(StorageLoc):
     """A fully applied lookup in a (potentially nested) mapping
        e.g. m[4][3] 
@@ -335,13 +228,7 @@ class MappingLoc(StorageLoc):
     loc: StorageLoc
     args: List[Exp]
 
-    def __init__(self, loc: str, args: List[Exp]):
-        self.loc = loc
-        self.args = args
-
-    def __repr__(self) -> str:
-        return f"MappingLoc({self.loc}, {self.args})"
-    
+@dataclass    
 class ContractLoc(StorageLoc):
     """A reference to a field on a contract that is held in storage
        e.g. c.x.y[3]
@@ -350,20 +237,15 @@ class ContractLoc(StorageLoc):
     contract: str
     name: str
 
-    def __init__(self, loc: StorageLoc, contract: str, name: str):
-        self.loc = loc
-        self.contract = contract
-        self.name = name
-
-    def __repr__(self) -> str:
-        return f"ContractLoc({self.loc}, {self.contract}, {self.name})"
-
+@dataclass
 class Constructor:
+    interface: Interface
     initial_storage: List[BoolExp]
     preConditions: List[BoolExp]
     postConditions: List[BoolExp]
     invariants: List[BoolExp]
 
+@dataclass
 class Behavior:
     """one function within a contract in a given case"""
     name: str
@@ -374,18 +256,22 @@ class Behavior:
     returnValue: Exp 
     stateUpdates: List[BoolExp] #equality constraints e.g. update
 
+@dataclass
 class Storage:
     """A description of the shape of global storage"""
     store: Dict[str, Dict[str, AbiType]]
 
+@dataclass
 class Contract:
+    name: str
     constructor: Constructor
     behaviors: List[Behavior]
 
+@dataclass
 class Act:
-    store: store
+    store: Storage
     contracts: List[Contract]
 
-
+@dataclass
 class AbiType:
     """TODO: fill me out with the solidity abi types"""
