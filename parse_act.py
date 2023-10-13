@@ -179,14 +179,14 @@ def parse_decl(decl: Dict) -> Decl:
 
 
 
-def parse_boolexp(boolexp: Dict) -> BoolExp:
+def parse_boolexp(boolexp: Dict) -> Exp:
     res = parse_exp(boolexp)
-    assert type(res)==BoolExp, "not a boolean expression"
+    assert res.type == ActBool, "not a boolean expression"
     return res
 
-def parse_intexp(intexp: Dict) -> IntExp:
+def parse_intexp(intexp: Dict) -> Exp:
     res = parse_exp(intexp)
-    assert type(res)==IntExp, "not an integer expression"
+    assert res.type == ActInt, "not an integer expression"
     return res
 
 def parse_typedexp(texp: Dict) -> Exp:
@@ -218,9 +218,9 @@ def parse_exp(exp: Dict) -> Exp:
             # Literal; either int or bool
             assert "type" in keys, "Missing 'type' key" 
             if exp["type"] == "int":
-                return LitInt(int(exp["literal"]))
+                return Lit(int(exp["literal"]), ActInt())
             elif exp["type"] == "bool":
-                return LitBool(bool(exp["literal"]))
+                return Lit(bool(exp["literal"]), ActBool())
             else:
                 assert False, "unsupported literal type"
 
@@ -228,9 +228,9 @@ def parse_exp(exp: Dict) -> Exp:
             # Variable; either int or bool
             assert "type" in keys, "Missing 'type' key"
             if exp["type"] == "int":
-                return VarInt(exp["var"])
+                return Var(exp["var"], ActInt())
             elif exp["type"] == "bool":
-                return VarBool(exp["var"])
+                return Var(exp["var"], ActBool())
             else:
                 assert False, "unsupported variable type"
     
@@ -238,19 +238,30 @@ def parse_exp(exp: Dict) -> Exp:
             # environment value; either int or bool
             assert "type" in keys, "Missing 'type' key" 
             if exp["type"] == "int":
-                return EnvVarInt(exp["envValue"])
+                return EnvVar(exp["envValue"]), ActInt()
             elif exp["type"] == "bool":
-                return EnvVarBool(exp["envValue"])
+                return EnvVar(exp["envValue"], ActBool())
             else:
                 assert False, "unsupported environment variable type"
 
         elif "entry" in keys:
             # storage item; with timing either pre or post
-            assert "timing" in keys, "Missing 'type' key"
+            assert "timing" in keys, "Missing 'timing' key"
+            assert "type" in keys, "Missing 'type' key"
             if exp["timing"] == "Pre":
-                return StorageItem(parse_storageloc(exp["entry"]), Pre())
+                if exp["type"] == "int":
+                    return StorageItem(parse_storageloc(exp["entry"]), Pre(), ActInt())
+                elif exp["type"] == "bool":
+                    return StorageItem(parse_storageloc(exp["entry"]), Pre(), ActBool())
+                else: 
+                    assert False, "unsupported 'type' value" 
             elif exp["timing"] == "Post":
-               return StorageItem(parse_storageloc(exp["entry"]), Post())
+                if exp["type"] == "int":
+                    return StorageItem(parse_storageloc(exp["entry"]), Post(), ActInt())
+                elif exp["type"] == "bool":
+                    return StorageItem(parse_storageloc(exp["entry"]), Post(), ActBool())
+                else: 
+                    assert False, "unsupported 'type' value" 
             else:
                 assert False, "unsupported timing value" 
 
@@ -287,29 +298,29 @@ def parse_symbol(symbol: str, type: str, args: List)-> Exp:
 
         if symbol == "+":
             assert  len(args) == 2, "two arguments expected for +"
-            assert all(isinstance(elem, IntExp) for elem in args), "expected integer expression arguments" 
+            assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
             return Add(*args)
         elif symbol == "-":
             assert len(args) == 2, "two arguments expected for -"
-            assert all(isinstance(elem, IntExp) for elem in args), "expected integer expression arguments" 
+            assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
             return Sub(*args)
         elif symbol == "*":
             assert len(args) == 2, "two arguments expected for *"
-            assert all(isinstance(elem, IntExp) for elem in args), "expected integer expression arguments" 
+            assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
             return Mul(*args)
         elif symbol == "/":
             assert len(args) == 2, "two arguments expected for /"
-            assert all(isinstance(elem, IntExp) for elem in args), "expected integer expression arguments" 
+            assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
             return Div(*args)
         elif symbol == "^":
             assert len(args) == 2, "two arguments expected for ^"
-            assert all(isinstance(elem, IntExp) for elem in args), "expected integer expression arguments" 
+            assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
             return Pow(*args)
 
 
         elif symbol == "inrange": 
             assert len(args) == 2, "two arguments expected for 'inrange'"
-            assert isinstance(args[0],IntExp), "first argument expected to be an integer expression"
+            assert isinstance(args[0].type, ActInt), "first argument expected to be an integer expression"
             assert isinstance(args[1],AbiIntType) or isinstance(args[1],AbiUIntType) or isinstance(args[1],AbiAddressType), \
                    "second argument expected to be of abi type int, uint or address"
             return InRange(*args)
@@ -318,59 +329,60 @@ def parse_symbol(symbol: str, type: str, args: List)-> Exp:
         elif symbol == "ite":
             assert len(args) == 3, "three arguments expected for 'ite'"
             if type=="int":
-                assert isinstance(args[0],BoolExp),"expected boolean expression arguments"
-                assert all(isinstance(elem, IntExp) for elem in args[1:]), "expected integer expression arguments" 
-                return ITEInt(*args)
+                assert isinstance(args[0].type, ActBool),"expected boolean expression arguments"
+                assert all(isinstance(elem.type, ActInt) for elem in args[1:]), "expected integer expression arguments" 
+                return ITE(*args, ActInt())
             elif type == "bool":
-                assert all(isinstance(elem, BoolExp) for elem in args), "expected boolean expression arguments" 
-                return ITEBool(*args)
+                assert all(isinstance(elem.type, ActBool) for elem in args), "expected boolean expression arguments" 
+                return ITE(*args, ActBool())
             else:
                 assert False, "Unsupported 'ite' type: " +type
+
         elif symbol == "=/=":
             assert len(args) == 2, "two arguments expected for '=/='"
-            all_bool = all(isinstance(elem, BoolExp) for elem in args)
-            all_int = all(isinstance(elem, IntExp) for elem in args)
+            all_bool = all(isinstance(elem.type, ActBool) for elem in args)
+            all_int = all(isinstance(elem.type, ActInt) for elem in args)
             assert all_bool or all_int, "expected all boolean or all integer expression arguments" 
             return Neq(*args)
         elif symbol == "==":
             assert len(args) == 2, "two arguments expected for '=='"
-            all_bool = all(isinstance(elem, BoolExp) for elem in args)
-            all_int = all(isinstance(elem, IntExp) for elem in args)
+            all_bool = all(isinstance(elem.type, ActBool) for elem in args)
+            all_int = all(isinstance(elem.type, ActInt) for elem in args)
             assert all_bool or all_int, "expected all boolean or all integer expression arguments" 
             return Eq(*args)
 
         elif symbol == "and":
             assert len(args) == 2, "two arguments expected for 'and'"
-            assert all(isinstance(elem, BoolExp) for elem in args), "expected boolean expression arguments" 
+            assert all(isinstance(elem.type, ActBool) for elem in args), "expected boolean expression arguments" 
             return And(*args)
         elif symbol == "or":
             assert len(args) == 2, "two arguments expected for 'or'"
-            assert all(isinstance(elem, BoolExp) for elem in args), "expected boolean expression arguments" 
+            assert all(isinstance(elem.type, ActBool) for elem in args), "expected boolean expression arguments" 
             return Or(*args)
         elif symbol == "not":
             assert len(args) == 1, "one argument expected for 'not'"
-            assert all(isinstance(elem, BoolExp) for elem in args), "expected boolean expression arguments" 
+            assert all(isinstance(elem.type, ActBool) for elem in args), "expected boolean expression arguments" 
             return Not(*args)
         elif symbol == "=>":
             assert len(args) == 2, "two arguments expected for '=>'"
-            assert all(isinstance(elem, BoolExp) for elem in args), "expected boolean expression arguments" 
+            assert all(isinstance(elem.type, ActBool) for elem in args), "expected boolean expression arguments" 
             return Implies(*args)
 
         elif symbol == "<":
             assert len(args) == 2, "two arguments expected for '<'"
-            assert all(isinstance(elem, IntExp) for elem in args), "expected integer expression arguments" 
+            assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
             return Lt(*args)
         elif symbol == ">":
             assert len(args) == 2, "two arguments expected for '>'"
-            assert all(isinstance(elem, IntExp) for elem in args), "expected integer expression arguments" 
+            assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
             return Gt(*args)
         elif symbol == "<=":
             assert len(args) == 2, "two arguments expected for '<='"
-            assert all(isinstance(elem, IntExp) for elem in args), "expected integer expression arguments" 
+            assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
             return Le(*args)
         elif symbol == ">=":
             assert len(args) == 2, "two arguments expected for '>='"
-            assert all(isinstance(elem, IntExp) for elem in args), "expected integer expression arguments" 
+            assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
             return Ge(*args)
         else:
             assert False, "Unsupported symbol: " + symbol
@@ -384,15 +396,15 @@ def parse_symbol(symbol: str, type: str, args: List)-> Exp:
 #   post of location = value
 # hence this is storageItem with loc=location
 
-def parse_stateupdate(update: Dict) -> BoolExp:
+def parse_stateupdate(update: Dict) -> Exp:
 
     assert "location" in update, "Missing 'location' key"    
     assert "value" in update, "Missing 'value' key"    
     return Eq(
-        StorageItem(
-            parse_storageloc(update["location"]), 
-            Post()
-        ), 
-        parse_exp(update["value"])
-    )
+                StorageItem(
+                    parse_storageloc(update["location"]), 
+                    Post()
+                ), 
+                parse_exp(update["value"])
+             )
 

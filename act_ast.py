@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Union
 
 
 
@@ -25,21 +25,21 @@ class Contract:
 @dataclass
 class Constructor:
     interface: Interface
-    initial_storage: List[BoolExp]
-    preConditions: List[BoolExp]
-    postConditions: List[BoolExp]
-    invariants: List[BoolExp]
+    initial_storage: List[Exp]
+    preConditions: List[Exp]
+    postConditions: List[Exp]
+    invariants: List[Exp]
 
 @dataclass
 class Behavior:
     """one function within a contract in a given case"""
     name: str
     interface: Interface
-    caseConditions: List[BoolExp]
-    preConditions: List[BoolExp]
-    postConditions: List[BoolExp]
+    caseConditions: List[Exp]
+    preConditions: List[Exp]
+    postConditions: List[Exp]
     returnValue: Exp 
-    stateUpdates: List[BoolExp] #equality constraints e.g. update
+    stateUpdates: List[Exp] #equality constraints e.g. update
 
 
 
@@ -144,137 +144,149 @@ class AbiFunctionType(AbiType):
 
 class Exp(metaclass=ABCMeta):
     """base class for expressions"""
+    type: ActType
 
-class IntExp(Exp, metaclass=ABCMeta):
-    """integer expressions"""
-
-class BoolExp(Exp, metaclass=ABCMeta):
-    """boolean expressions"""
+class ActType(metaclass=ABCMeta):
+    """Base class for act types"""
 
 @dataclass
-class LitBool(BoolExp):
-    value: bool
+class ActBool(ActType):
+    """"act bool type"""
 
 @dataclass
-class VarBool(BoolExp):
+class ActInt(ActType):
+    """act int type"""
+
+
+
+
+
+
+@dataclass
+class Lit(Exp):
+    value: Union(bool, int)
+
+@dataclass
+class Var(Exp):
     name: str
 
 @dataclass
-class And(BoolExp):
+class And(Exp):
     """conjunction of two boolean expressions"""
-    left: BoolExp
-    right: BoolExp
+    left: Exp
+    right: Exp
+    type: ActType = ActBool()
 
 @dataclass
-class Or(BoolExp):
+class Or(Exp):
     """disjunction of two boolean expressions"""
-    left: BoolExp
-    right: BoolExp
+    left: Exp
+    right: Exp
+    type: ActType = ActBool()
 
 @dataclass
-class Not(BoolExp):
+class Not(Exp):
     """Negation of a boolean expression"""
-    value: BoolExp
+    value: Exp
+    type: ActType = ActBool()
 
 @dataclass
-class Implies(BoolExp):
+class Implies(Exp):
     """implication of two boolean expressions"""
-    left: BoolExp
-    right: BoolExp
+    left: Exp
+    right: Exp
+    type: ActType = ActBool()
 
 @dataclass
-class ITEInt(IntExp):
-    condition: BoolExp
-    left: IntExp
-    right: IntExp
-
-@dataclass
-class ITEBool(BoolExp):
-    condition: BoolExp
-    left: BoolExp
-    right: BoolExp
-
-@dataclass
-class Eq(BoolExp):
+class ITE(Exp):
+    condition: Exp
     left: Exp
     right: Exp
 
 @dataclass
-class Neq(BoolExp):
+class Eq(Exp):
     left: Exp
     right: Exp
+    type: ActType = ActBool()
 
 @dataclass
-class InRange(BoolExp):
-    expr: IntExp
-    abitype: AbiType
-    # only allow (int, uint, address) 
+class Neq(Exp):
+    left: Exp
+    right: Exp
+    type: ActType = ActBool()
+
+@dataclass
+class InRange(Exp):
+    expr: Exp
+    abitype: AbiType # only allow (int, uint, address) 
+    type: ActType = ActBool()
+    
 
 # arithmetic
 @dataclass
-class LitInt(IntExp):
-    value: int
-
-@dataclass
-class VarInt(IntExp):
-    name: str
-
-@dataclass
-class Add(IntExp):
+class Add(Exp):
     """addition of two integer expressions"""
-    left: IntExp
-    right: IntExp
+    left: Exp
+    right: Exp
+    type: ActType = ActInt()
 
 @dataclass 
-class Sub(IntExp):
+class Sub(Exp):
     """subtraction of two integer expressions"""
-    left: IntExp
-    right: IntExp
+    left: Exp
+    right: Exp
+    type: ActType = ActInt()
 
 @dataclass
-class Mul(IntExp):
+class Mul(Exp):
     """multiplication of two integer expressions"""
-    left: IntExp
-    right: IntExp
+    left: Exp
+    right: Exp
+    type: ActType = ActInt()
 
 @dataclass
-class Div(IntExp):
+class Div(Exp):
     """division of two integer expressions"""
-    left: IntExp
-    right: IntExp
+    left: Exp
+    right: Exp
+    type: ActType = ActInt()
 
 @dataclass
-class Pow(IntExp):
+class Pow(Exp):
     """division of two integer expressions"""
-    left: IntExp
-    right: IntExp
+    left: Exp
+    right: Exp
+    type: ActType = ActInt()
 
 
-# relations of IntBool
+# relations 
 @dataclass
-class Lt(BoolExp):
+class Lt(Exp):
     """less than comparison of two integer expressions"""
-    left: IntExp
-    right: IntExp
+    left: Exp
+    right: Exp
+    type: ActType = ActBool()
 
 @dataclass
-class Le(BoolExp):
+class Le(Exp):
     """less than or equal comparison of two integer expressions"""
-    left: IntExp
-    right: IntExp
+    left: Exp
+    right: Exp
+    type: ActType = ActBool()
 
 @dataclass
-class Gt(BoolExp):
+class Gt(Exp):
     """greater than comparison of two integer expressions"""
-    left: IntExp
-    right: IntExp
+    left: Exp
+    right: Exp
+    type: ActType = ActBool()
 
 @dataclass
-class Ge(BoolExp):
+class Ge(Exp):
     """greater than or equal comparison of two integer expressions"""
-    left: IntExp
-    right: IntExp
-
+    left: Exp
+    right: Exp
+    type: ActType = ActBool()
 
 
 
@@ -282,21 +294,15 @@ class Ge(BoolExp):
 # --- environment Variables ---
 
 @dataclass  
-class EnvVarInt(IntExp):
-    """A reference to an environment variable (e.g. msg.sender)"""
-    name: str
-
-@dataclass  
-class EnvVarBool(BoolExp):
+class EnvVar(Exp):
     """A reference to an environment variable (e.g. msg.sender)"""
     name: str
 
 @dataclass    
-class StorageItem(Exp): # should it also be either bool or int?
+class StorageItem(Exp): 
     """This is TItem in TimeAgnostic.hs"""
     loc: StorageLoc
     time: Timing
-
 
 
 
