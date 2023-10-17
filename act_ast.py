@@ -69,8 +69,8 @@ class SlotType(metaclass=ABCMeta):
 # --- Mapping Types ---
 @dataclass
 class MappingType(SlotType):
-    argsType: List[ValueType]
-    resultType: ValueType
+    argsType: List[ValueType] 
+    resultType: ValueType 
 
 
 class ValueType(SlotType, metaclass=ABCMeta):
