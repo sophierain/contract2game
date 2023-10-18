@@ -209,8 +209,16 @@ def parse_exp(exp: Dict) -> Exp:
         #recursive case
         assert "type" in keys, "Missing 'type' key"    
         assert "args" in keys, "Missing 'args' key"
-
-        return parse_symbol(exp["symbol"], exp["type"], [parse_exp(elem) for elem in exp["args"]])
+        if exp["symbol"] == "inrange":
+            assert len(exp["args"]) == 2, "two arguments expected for 'inrange'"
+            first_arg = parse_exp(exp["args"][0])
+            second_arg = parse_abitype(exp["args"][1])
+            assert isinstance(first_arg.type, ActInt), "first argument expected to be an integer expression"
+            assert isinstance(second_arg, AbiIntType) or isinstance(second_arg, AbiUIntType) or isinstance(second_arg, AbiAddressType), \
+                    "second argument expected to be of abi type int, uint or address"
+            return InRange(first_arg, second_arg)
+        else:
+            return parse_symbol(exp["symbol"], exp["type"], [parse_exp(elem) for elem in exp["args"]])
 
     else:
         # Base Case
@@ -238,7 +246,7 @@ def parse_exp(exp: Dict) -> Exp:
             # environment value; either int or bool
             assert "type" in keys, "Missing 'type' key" 
             if exp["type"] == "int":
-                return EnvVar(exp["envValue"]), ActInt()
+                return EnvVar(exp["envValue"], ActInt())
             elif exp["type"] == "bool":
                 return EnvVar(exp["envValue"], ActBool())
             else:
@@ -294,7 +302,7 @@ def parse_storageloc(sloc: Dict) -> StorageLoc:
     else:
         assert False, "unsupported storage kind: " + sloc["kind"]
 
-def parse_symbol(symbol: str, type: str, args: List)-> Exp:    
+def parse_symbol(symbol: str, type: str, args: List[Exp])-> Exp:    
 
         if symbol == "+":
             assert  len(args) == 2, "two arguments expected for +"
@@ -316,14 +324,6 @@ def parse_symbol(symbol: str, type: str, args: List)-> Exp:
             assert len(args) == 2, "two arguments expected for ^"
             assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
             return Pow(*args)
-
-
-        elif symbol == "inrange": 
-            assert len(args) == 2, "two arguments expected for 'inrange'"
-            assert isinstance(args[0].type, ActInt), "first argument expected to be an integer expression"
-            assert isinstance(args[1],AbiIntType) or isinstance(args[1],AbiUIntType) or isinstance(args[1],AbiAddressType), \
-                   "second argument expected to be of abi type int, uint or address"
-            return InRange(*args)
        
 
         elif symbol == "ite":
@@ -399,12 +399,28 @@ def parse_symbol(symbol: str, type: str, args: List)-> Exp:
 def parse_stateupdate(update: Dict) -> Exp:
 
     assert "location" in update, "Missing 'location' key"    
-    assert "value" in update, "Missing 'value' key"    
-    return Eq(
+    assert "value" in update, "Missing 'value' key"  
+    assert "type" in update["location"]  , "Missing 'type' key"
+
+    if update["location"]["type"]== "int": 
+        return Eq(
                 StorageItem(
                     parse_storageloc(update["location"]), 
-                    Post()
+                    Post(),
+                    ActInt()
                 ), 
                 parse_exp(update["value"])
-             )
+                )
+    elif update["location"]["type"]== "bool":
+        return Eq(
+                StorageItem(
+                    parse_storageloc(update["location"]), 
+                    Post(),
+                    ActBool()
+                ), 
+                parse_exp(update["value"])
+                )
+    else: 
+        assert False, "unsupported StorageItem type: " + update["location"]["type"]
+                
 

@@ -1,4 +1,4 @@
-from typing import Union, Set, Dict, List, Any
+from typing import Union, Set, Dict, List, Any, Tuple
 from dataclasses import dataclass
 from parse_act import *
 from act_ast import *
@@ -8,16 +8,9 @@ Integer = Union[int, z3.ArithRef]
 Boolean = Union[bool, z3.BoolRef]
 SymVar = Union[Integer, Boolean, z3.FuncDeclRef] 
 
-# generic contract -> field name -> z3 variable
-# or generic contract -> instantiated contract ... -> field name -> z3.variable
-SymStore = Dict[str, Dict[str, SymVar | Dict[str, Any]]]
+PreStore = Dict[str, Union[SymVar, 'PreStore']]
+SymStore = Dict[str, PreStore]
 
-
-#not sure we need this, does z3 create distinct variables if their names are identical?
-# var name -> z3 variable
-SymEnv = Dict[str, Integer]
-# var name -> z3 variable
-SymCalldata = Dict[str, SymVar]
 
 """
 x = z3.Int(<name>): z3.ArithRef                                         integer constant named <name>
@@ -36,14 +29,11 @@ class SymState:
     constraints: Set[z3.BoolRef]
 
 
-class BaseTree(metaclass=ABCMeta):
-    """base class for game trees"""
-
 @dataclass
-class Tree(BaseTree):
+class Tree:
     """a non-leaf node with children"""
     state: SymState
-    children: Dict[str, BaseTree]
+    children: Dict[str, 'Tree']
 
 
 
@@ -53,10 +43,21 @@ def extract_constraints(behv: Behavior) -> Set[Exp]:
     return set(behv.caseConditions + behv.preConditions + behv.stateUpdates)
 
 
-def apply_behaviour(state: SymState, behv: Behavior) -> SymState:
-    pass
+def apply_behaviour(state: SymState, history: List[str], behv: Behavior) -> SymState:
+    """apply behavior 'behv' to the state 'state'"""
+    constraints = {}
+    for exp in behv.caseConditions:
+        constraints.add(to_smt(state.storage, history, exp))
+    for exp in behv.preConditions:
+        constraints.add(to_smt(state.storage, history, exp))
+    for exp in behv.postConditions:
+        constraints.add(to_smt(state.storage, history + [behv.name], exp))
+    for exp in behv.stateUpdates:
+        constraints.add(to_smt(state.storage, history + [behv.name], exp))
+    # add invariants!
+    # where to use history and where to use history + [behv.name]
 
-
+    return SymState(state.storage, constraints)
 
 def reachable(state: SymState) -> z3.CheckSatResult:
     pass
@@ -64,29 +65,42 @@ def reachable(state: SymState) -> z3.CheckSatResult:
 
 def init_state(storage: Storage, ctor: Constructor, extraConstraints: Set[Exp]) -> SymState:
     """translate storage information to smt concepts, and collect initial constraints from user and invariants"""
-    state = dict()
+    store: Dict = dict()
     for key, value in storage.items():
-        state[key] = dict()
+        store[key] = dict()
         for nested_key, nested_value in value.items():
-            state[key][nested_key] = slottype2smt(key, nested_key, nested_value, storage)
-    
+            store[key][nested_key] = slottype2smt(key, nested_key, nested_value, storage)
+
+
     smt_constraints = []
     for exp in extraConstraints:
-        smt_constraints.append(to_smt(exp, []))
+        smt_constraints.append(to_smt(store, [], exp))
     for exp in ctor.invariants:
-        smt_constraints.append(to_smt(exp, []))
+        smt_constraints.append(to_smt(store, [], exp))
 
-    return SymState(state, set(smt_constraints))
+    return SymState(store, set(smt_constraints))
 
 
+def contract2tree(contract: Contract, storage: Storage) -> Tree:
+    """ description to be added"""
 
-def generate_tree(tree: Tree, behvs: Set[Behavior]) -> Tree:
-    """recursively extends the tree by applying all behaviors to all leaves until no new reachable states are found"""
-    pass
+    # to be extended with actual extra constraints!
+    extra_constraints = {}
+    root = init_state(storage, contract.constructor, extra_constraints)
     
+    return generate_tree(Tree(root, dict()), [], contract.behaviors)
 
 
-def slottype2smt(contract: str, name: str, slot: SlotType, storage: Storage) -> SymVar | Dict :
+def generate_tree(tree: Tree, history: List[str], behvs: List[Behavior]) -> Tree:
+    """recursively extends the tree by applying all behaviors to all leaves until no new reachable states are found"""
+    
+    children = dict()
+    for behv in behvs:
+        children[behv.name] = apply_behaviour(tree.state, history, behv)
+
+    pass
+
+def slottype2smt(contract: str, name: str, slot: SlotType, storage: Storage) -> SymVar | PreStore :
     '''needed to keep track of all smt declarations for the storage'''
     var_name = to_storage_label(contract, name)
     if isinstance(slot, AbiIntType):
@@ -102,8 +116,9 @@ def slottype2smt(contract: str, name: str, slot: SlotType, storage: Storage) -> 
     elif isinstance(slot, ContractType): 
         assert slot.contract in storage #repeat stuff with storage[slot.contract] and add contract to the storage label
         smt_store = dict()
-        for key, value in storage[slot.contract]:
-            smt_store[key] = slottype2smt(to_storage_label(contract, name), key, value, storage[slot.contract])
+        for key, value in storage[slot.contract].items():
+            # key: str, value: SlotType
+            smt_store[key] = slottype2smt(to_storage_label(contract, name), key, value, storage)
         return smt_store
         
     elif isinstance(slot, MappingType):
@@ -113,7 +128,7 @@ def slottype2smt(contract: str, name: str, slot: SlotType, storage: Storage) -> 
                 result = z3.IntSort()
             else:
                 # to be extended to other datatypes later
-                assert False, "unsupported result datatype: " + type(slot.resultType)
+                assert False, "unsupported result datatype: " + str(type(slot.resultType))
 
             args = []
             for elem in slot.argsType:
@@ -123,17 +138,15 @@ def slottype2smt(contract: str, name: str, slot: SlotType, storage: Storage) -> 
                     args.append(z3.IntSort())
                 else:
                      # to be extended to other datatypes later
-                    assert False, "unsupported argument datatype: " + type(elem)
+                    assert False, "unsupported argument datatype: " + str(type(elem))
 
             return z3.Function(to_storage_label(contract, name), *args, result)
 
     else:
-        assert False, "unsupported abi datatype: " + type(slot)
+        assert False, "unsupported abi datatype: " + str(type(slot))
 
 
-
-# remove env and calldata
-def to_smt(env: SymEnv, calldata: SymCalldata, store: SymStore, history: List[str], exp: Exp) -> Integer | Boolean: # type checking!
+def to_smt(store: SymStore, history: List[str], exp: Exp) -> Integer | Boolean:
     """
     supported Boolean operations:
         Lit
@@ -182,9 +195,9 @@ def to_smt(env: SymEnv, calldata: SymCalldata, store: SymStore, history: List[st
             return z3.Int(to_label(history, exp.name))
        
     elif isinstance(exp, StorageItem):
-        result = generate_smt_storageloc(env, calldata, store, history, exp.loc)
+        result = generate_smt_storageloc(store, history, exp.loc)
         if isinstance(exp.time, Post):
-            if isinstance(exp.type. ActBool):
+            if isinstance(exp.type, ActBool):
                 return postbool(result)
             else:
                  return postint(result)
@@ -194,41 +207,41 @@ def to_smt(env: SymEnv, calldata: SymCalldata, store: SymStore, history: List[st
     # boolean expressions
 
     elif isinstance(exp, And):
-        return z3.And(to_smt(env, calldata, store, history, exp.left),
-                      to_smt(env, calldata, store, history, exp.right)
+        return z3.And(to_smt(store, history, exp.left),
+                      to_smt(store, history, exp.right)
                       )
     
     elif isinstance(exp, Or):
-        return z3.Or(to_smt(env, calldata, store, history, exp.left), 
-                     to_smt(env, calldata, store, history, exp.right)
+        return z3.Or(to_smt(store, history, exp.left), 
+                     to_smt(store, history, exp.right)
                      )
     
     elif isinstance(exp, Not):
-        return z3.Not(to_smt(env, calldata, store, history, exp.value))
+        return z3.Not(to_smt(store, history, exp.value))
     
     elif isinstance(exp, Implies):
-        return z3.Implies(to_smt(env, calldata, store, history, exp.left), 
-                          to_smt(env, calldata, store, history, exp.right)
+        return z3.Implies(to_smt(store, history, exp.left), 
+                          to_smt(store, history, exp.right)
                           )
     
     elif isinstance(exp, ITE):
-        return z3.If(to_smt(env, calldata, store, history, exp.condition),
-                     to_smt(env, calldata, store, history, exp.left),
-                     to_smt(env, calldata, store, history, exp.right)
+        return z3.If(to_smt(store, history, exp.condition),
+                     to_smt(store, history, exp.left),
+                     to_smt(store, history, exp.right)
                      )                   
     
     elif isinstance(exp, Eq):
         both_bool = isinstance(exp.left.type, ActBool) and isinstance(exp.right.type, ActBool)
         both_int = isinstance(exp.left.type, ActInt) and isinstance(exp.right.type, ActInt)
         assert both_bool or both_int, "left and right have to be of the same type"
-        return to_smt(env, calldata, store, history, exp.left) == to_smt(env, calldata, store, history, exp.right)
+        return to_smt(store, history, exp.left) == to_smt(store, history, exp.right)
 
     elif isinstance(exp, Neq):
         both_bool = isinstance(exp.left.type, ActBool) and isinstance(exp.right.type, ActBool)
         both_int = isinstance(exp.left.type, ActInt) and isinstance(exp.right.type, ActInt)
         assert both_bool or both_int, "left and right have to be of the same type"
-        return z3.Not(to_smt(env, calldata, store, history, exp.left) == 
-                      to_smt(env, calldata, store, history, exp.right))
+        return z3.Not(to_smt(store, history, exp.left) == 
+                      to_smt(store, history, exp.right))
 
     elif isinstance(exp, InRange):
         if isinstance(InRange.abitype, AbiIntType):
@@ -243,61 +256,58 @@ def to_smt(env: SymEnv, calldata: SymCalldata, store: SymStore, history: List[st
         else:
             assert False, "unsupported abitype for inrange"
         return z3.And(
-                    to_smt(env, calldata, store, history, Le(min, exp.expr)),
-                    to_smt(env, calldata, store, history, Le(exp.expr, max))
+                    to_smt(store, history, Le(min, exp.expr)),
+                    to_smt(store, history, Le(exp.expr, max))
                     )
     
     elif isinstance(exp, Lt):
-        return to_smt(env, calldata, store, history, exp.left) < \
-               to_smt(env, calldata, store, history, exp.right)
+        return to_smt(store, history, exp.left) < \
+               to_smt(store, history, exp.right)
 
     elif isinstance(exp, Le):
-        return to_smt(env, calldata, store, history, exp.left) <= \
-               to_smt(env, calldata, store, history, exp.right)
+        return to_smt(store, history, exp.left) <= \
+               to_smt(store, history, exp.right)
     
     elif isinstance(exp, Gt):
-        return to_smt(env, calldata, store, history, exp.left) > \
-               to_smt(env, calldata, store, history, exp.right)
+        return to_smt(store, history, exp.left) > \
+               to_smt(store, history, exp.right)
     
     elif isinstance(exp, Ge):
-        return to_smt(env, calldata, store, history, exp.left) >= \
-               to_smt(env, calldata, store, history, exp.right)
+        return to_smt(store, history, exp.left) >= \
+               to_smt(store, history, exp.right)
 
     # integer expressions:
  
     elif isinstance(exp, Add):
-        return to_smt(env, calldata, store, history, exp.left) + \
-               to_smt(env, calldata, store, history, exp.right)
+        return to_smt(store, history, exp.left) + \
+               to_smt(store, history, exp.right)
     
     elif isinstance(exp, Sub):
-        return to_smt(env, calldata, store, history, exp.left) - \
-               to_smt(env, calldata, store, history, exp.right)
+        return to_smt(store, history, exp.left) - \
+               to_smt(store, history, exp.right)
     
     elif isinstance(exp, Mul):
-        return to_smt(env, calldata, store, history, exp.left) * \
-               to_smt(env, calldata, store, history, exp.right)
+        return to_smt(store, history, exp.left) * \
+               to_smt(store, history, exp.right)
     
     elif isinstance(exp, Div):
-        return to_smt(env, calldata, store, history, exp.left) / \
-               to_smt(env, calldata, store, history, exp.right)
+        return to_smt(store, history, exp.left) / \
+               to_smt(store, history, exp.right)
     
     elif isinstance(exp, Pow):
-        left = to_smt(env, calldata, store, history, exp.left)
-        right = to_smt(env, calldata, store, history, exp.right)
+        left = to_smt(store, history, exp.left)
+        right = to_smt(store, history, exp.right)
         assert isinstance(left, int) & isinstance(right, int), "symbolic exponentiation not supported"
         return left ** right
 
     else:
         assert isinstance(exp, ITE)
-        return z3.If(to_smt(env, calldata, store, history, exp.condition),
-                    to_smt(env, calldata, store, history, exp.left),
-                    to_smt(env, calldata, store, history, exp.right)) 
+        return z3.If(to_smt(store, history, exp.condition),
+                    to_smt(store, history, exp.left),
+                    to_smt(store, history, exp.right)) 
         
 
-
-
-def generate_smt_storageloc(env: SymEnv,
-                            calldata: SymCalldata,
+def generate_smt_storageloc(
                             store: SymStore, 
                             history: List[str], 
                             loc: StorageLoc)      ->     SymVar:
@@ -308,10 +318,11 @@ def generate_smt_storageloc(env: SymEnv,
         elif isinstance(loc, MappingLoc):
             smt_args = []
             for elem in loc.args:
-                smt_args.append(to_smt(env, calldata, store, history, elem))
+                smt_args.append(to_smt(store, history, elem))
 
-            func = generate_smt_storageloc(env, calldata, store, history, loc.loc)
-            return func(*smt_args)  # not sure this works
+            func = generate_smt_storageloc(store, history, loc.loc)
+            assert isinstance(func, z3.FuncDeclRef)
+            return func(*smt_args)  # not convinced this works, should work though
         
         else:
             assert isinstance(loc, ContractLoc)
@@ -324,18 +335,23 @@ def generate_smt_storageloc(env: SymEnv,
                     assert False, "mappings returning contracts is currently not implemented"
             collect_list_of_keys = [loc.loc.name] + collect_list_of_keys
 
-            return walk_the_storage(store, collect_list_of_keys)
+            return walk_the_storage(store[collect_list_of_keys[0]], collect_list_of_keys[1:])
         
 
-
-def walk_the_storage(store: SymStore | Dict[str, SymVar] | SymVar, keys: List) -> \
-                                                    SymStore | SymVar | Dict[str, SymVar]:
+def walk_the_storage(store: PreStore, keys: List) -> SymVar:
+    
+    isint = isinstance(store[keys[0]], int)
+    isintsort = isinstance(store[keys[0]], z3.ArithRef)
+    isbool = isinstance(store[keys[0]], bool)
+    isboolsort = isinstance(store[keys[0]], z3.BoolRef)
+    isfun = isinstance(store[keys[0]], z3.FuncDeclRef)
+    issymvar = isfun or isint or isintsort or isbool or isboolsort
     if len(keys)==1:
-        assert isinstance(store[keys[0]], SymVar), "contradicting types" 
+        assert issymvar, "contradicting types" 
         return store[keys[0]]
     else:
+        assert not issymvar, "contradicting types" 
         return walk_the_storage(store[keys[0]], keys[1:])
-
 
 def to_label(history: List[str], name: str) -> str:
     label = ""
@@ -346,9 +362,7 @@ def to_label(history: List[str], name: str) -> str:
     label = label + ";" + name
     return label
 
-
-
-def from_label(label: str) -> (List[str], str):
+def from_label(label: str) -> Tuple[List[str], str]:
 
     res = label.split(";")
     assert len(res) > 0
@@ -358,73 +372,4 @@ def from_label(label: str) -> (List[str], str):
 def to_storage_label(contract: str, name: str) -> str:
     return contract + "." + name
 
-"""
-contract C {
-  uint x;
-  uint y;
-  bool z;
-
-  function f(uint , uint) -> uint {
-  
-  }
-}
-
-
-"C": {
-    x: AbiUintType(256),
-    y: AbiUintType(256),
-    z: AbiBoolType
-}
-
----
-
-"C": {
-    "x": z3.IntRef C.x,
-    "y": z3.IntRef C.y,
-    "z": z3.BoolRef C.z
-}
-
-0 <= x <= 2^256
-0 <= y <= 2^256
-
-"""
-
-
-
-# @dataclass
-# class SMT_Behavior:
-#     name: str
-#     caseConditions: Boolean
-#     preConditions: Boolean
-#     postConditions: Boolean
-#     stateUpdates: Boolean
-
-# @dataclass
-# class SMT_Contract:
-#     name: str
-#     behaviors: List[SMT_Behavior]
-
-# def act_to_smt(act: Act) -> List[SMT_Contract]:
-#     return [contract_to_smt(elem, act["store"]) for elem in act["contracts"]]
-
-# def contract_to_smt(contract: Contract, store: Storage) -> SMT_Contract:
-#     return SMT_Contract(contract["name"], [behavior_to_smt(elem, contract["constructor"], store) for elem in contract["behaviors"]])
-
-# def behavior_to_smt(behv: Behavior, contr: Constructor, store: Storage) -> SMT_Behavior:
-
-#     case = conjunction(*[generate_constraint(elem, contr, store) for elem in behv["caseConditions"]])
-#     pre = conjunction(*[generate_constraint(elem, contr, store) for elem in behv["preConditions"]])
-#     post = conjunction(*[generate_constraint(elem, contr, store) for elem in behv["postConditions"]])
-#     updates = conjunction(*[generate_constraint(elem, contr, store) for elem in behv["stateUpdates"]])
-
-#     return SMT_Behavior(behv["name"], case, pre, post, updates)
-
-# def generate_constraint(boolexp: BoolExp, contr: Constructor, store: Storage) -> Boolean:
-#     # are Contructor and Storage needed for our purpose?
-    
-#     if isinstance(boolexp, LitBool):
-#         return boolexp["value"]
-#     elif isinstance(boolexp, VarBool):
-#         return z3.Bool(boolexp["name"])
-    
 

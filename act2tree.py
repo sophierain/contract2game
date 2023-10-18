@@ -11,6 +11,8 @@ import itertools
 import json
 from act_ast import Contract, LitBool, And
 from parse_act import parse_act_json
+from ast2smt import *
+from smt2tree import *
 
 
 from typing import Any, Dict, Iterable, List, Union
@@ -24,14 +26,16 @@ path = argv[1]
 
 obj = json.load(open(path))
 
-
-
-
+# parse json into an Act instance
 act = parse_act_json(obj)
 
+act_trees = []
+for considered_contract in act.find_maincontract():
+       act_trees.append(contract2tree(considered_contract, act.storage))
 
 
-# considered_contract = Contract(contracts[0])
+
+
 
 # print(considered_contract)
 

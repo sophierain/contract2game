@@ -14,7 +14,15 @@ class Act:
     store: Storage
     contracts: List[Contract]
 
-
+    def find_maincontract(self)-> Contract:
+        not_main = []
+        for key, value in self.store.items():
+            for nested_key, nested_value in value.items():
+                if isinstance(nested_value, ContractType):
+                    not_main.append(nested_value.contract)
+        for c in self.contracts: 
+            if c.name not in not_main:
+                yield c
 
 @dataclass
 class Contract:
@@ -66,6 +74,9 @@ class Decl:
 class SlotType(metaclass=ABCMeta):
     """base class for storage variables"""
 
+"""A description of the shape of global storage"""
+Storage = Dict[str, Dict[str, SlotType]]
+
 # --- Mapping Types ---
 @dataclass
 class MappingType(SlotType):
@@ -76,8 +87,7 @@ class MappingType(SlotType):
 class ValueType(SlotType, metaclass=ABCMeta):
     """base class for storage base variables"""
 
-"""A description of the shape of global storage"""
-Storage = Dict[str, Dict[str, SlotType]]
+
 
 
 @dataclass
@@ -164,11 +174,13 @@ class ActInt(ActType):
 
 @dataclass
 class Lit(Exp):
-    value: Union(bool, int)
+    value: Union[bool, int]
+    type: ActType
 
 @dataclass
 class Var(Exp):
     name: str
+    type: ActType
 
 @dataclass
 class And(Exp):
@@ -199,9 +211,11 @@ class Implies(Exp):
 
 @dataclass
 class ITE(Exp):
+    """description"""
     condition: Exp
     left: Exp
     right: Exp
+    type: ActType
 
 @dataclass
 class Eq(Exp):
@@ -297,12 +311,14 @@ class Ge(Exp):
 class EnvVar(Exp):
     """A reference to an environment variable (e.g. msg.sender)"""
     name: str
+    type: ActType
 
 @dataclass    
 class StorageItem(Exp): 
     """This is TItem in TimeAgnostic.hs"""
     loc: StorageLoc
     time: Timing
+    type: ActType
 
 
 
