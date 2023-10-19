@@ -26,7 +26,7 @@ postbool = z3.Function("postbool", z3.BoolSort(), z3.BoolSort())
 @dataclass
 class SymState:
     storage: SymStore
-    constraints: Set[z3.BoolRef]
+    constraints: Set[Boolean]
 
 
 @dataclass
@@ -43,21 +43,70 @@ def extract_constraints(behv: Behavior) -> Set[Exp]:
     return set(behv.caseConditions + behv.preConditions + behv.stateUpdates)
 
 
-def apply_behaviour(state: SymState, history: List[str], behv: Behavior) -> SymState:
+def apply_behaviour(state: SymState, history: List[str], contr: Constructor, behv: Behavior) -> SymState:
     """apply behavior 'behv' to the state 'state'"""
+
+    new_storage = gen_poststore(state.storage, behv.name)
+
+
+
     constraints = {}
     for exp in behv.caseConditions:
-        constraints.add(to_smt(state.storage, history, exp))
+        constraints.add(to_smt(state.storage, new_storage, history + [behv.name], exp)) # to_smt has to be adapted, esp. storageloc fct
     for exp in behv.preConditions:
-        constraints.add(to_smt(state.storage, history, exp))
+        constraints.add(to_smt(state.storage, new_storage, history + [behv.name], exp))
     for exp in behv.postConditions:
-        constraints.add(to_smt(state.storage, history + [behv.name], exp))
-    for exp in behv.stateUpdates:
-        constraints.add(to_smt(state.storage, history + [behv.name], exp))
-    # add invariants!
-    # where to use history and where to use history + [behv.name]
+        constraints.add(to_smt(state.storage, new_storage, history + [behv.name], exp))
+    for exp in contr.invariants:
+        constraints.add(to_smt(state.storage, new_storage, history + [behv.name], exp))
 
-    return SymState(state.storage, constraints)
+    update_constraints = {}
+    for exp in behv.stateUpdates:
+        update_constraints = constraints.add(to_smt(state.storage, new_storage, history + [behv.name], exp))
+   
+    no_update_constraints = no_update(state.storage, new_storage, behv.name, update_constraints)
+
+    return SymState(new_storage, constraints + update_constraints + no_update_constraints) # + operator for sets?
+
+def no_update(prestore: SymStore, poststore: SymStore, behv_name: str, updates: Set[Boolean]) -> Set[Boolean]:
+    pass
+
+def gen_poststore(pre: Union[SymStore,PreStore], name: str) -> Union[SymStore,PreStore]:
+    post = dict()
+
+    for key, value in pre:
+        if not isinstance(value, Dict):
+            # base case, we hit a SymVar:
+            if isinstance(value, z3.FuncDeclRef):
+                z3sorts = []
+                arity = value.arity()
+                for i in range(arity):
+                    if value.domain(i) == bool:
+                        z3sorts.append(z3.BoolSort()) 
+                    elif value.domain(i) == int:
+                        z3sorts.append(z3.IntSort())
+                    else: 
+                        assert False, "sorts other than int or bool not supported"
+                if value.range() == bool:
+                    z3sorts.append(z3.BoolSort()) 
+                elif value.range() == int:
+                    z3sorts.append(z3.IntSort())
+                else: 
+                    assert False, "sorts other than int or bool not supported"
+
+                post[key] = z3.Function(name + "_" + value.name(), *z3sorts) 
+            
+            elif isinstance(value, z3.ArithRef):
+                post[key] = z3.ArithRef(name + "_" + value.decl().name())
+            elif isinstance(value, z3.BoolRef):
+                post[key] = z3.BoolRef(name + "_" + value.decl().name())
+            else: 
+                assert False, "storage items have to be either z3 bool, z3 int or z3 functions"
+        else:
+            post[key] = gen_poststore(value, name)
+
+    return post
+
 
 def reachable(state: SymState) -> z3.CheckSatResult:
     pass
@@ -75,8 +124,6 @@ def init_state(storage: Storage, ctor: Constructor, extraConstraints: Set[Exp]) 
     smt_constraints = []
     for exp in extraConstraints:
         smt_constraints.append(to_smt(store, [], exp))
-    for exp in ctor.invariants:
-        smt_constraints.append(to_smt(store, [], exp))
 
     return SymState(store, set(smt_constraints))
 
@@ -88,15 +135,15 @@ def contract2tree(contract: Contract, storage: Storage) -> Tree:
     extra_constraints = {}
     root = init_state(storage, contract.constructor, extra_constraints)
     
-    return generate_tree(Tree(root, dict()), [], contract.behaviors)
+    return generate_tree(Tree(root, dict()), [], contract.constructor, contract.behaviors)
 
 
-def generate_tree(tree: Tree, history: List[str], behvs: List[Behavior]) -> Tree:
+def generate_tree(tree: Tree, history: List[str], contr: Constructor, behvs: List[Behavior]) -> Tree:
     """recursively extends the tree by applying all behaviors to all leaves until no new reachable states are found"""
     
     children = dict()
     for behv in behvs:
-        children[behv.name] = apply_behaviour(tree.state, history, behv)
+        children[behv.name] = apply_behaviour(tree.state, history, contr, behv)
 
     pass
 
@@ -196,7 +243,7 @@ def to_smt(store: SymStore, history: List[str], exp: Exp) -> Integer | Boolean:
        
     elif isinstance(exp, StorageItem):
         result = generate_smt_storageloc(store, history, exp.loc)
-        if isinstance(exp.time, Post):
+        if isinstance(exp.time, Post): # cannot work this way
             if isinstance(exp.type, ActBool):
                 return postbool(result)
             else:

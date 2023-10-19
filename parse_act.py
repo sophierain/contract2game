@@ -116,10 +116,10 @@ def parse_constructor(ctor: Dict)-> Constructor:
 
     return Constructor(
                         parse_interface(ctor["interface"]),
-                        [parse_boolexp(elem) for elem in ctor["initial_storage"] ],
+                        [parse_initstore(elem) for elem in ctor["initial_storage"] ], 
                         [parse_boolexp(elem) for elem in ctor["preConditions"] ],
                         [parse_boolexp(elem) for elem in ctor["postConditions"] ],
-                        [parse_boolexp(elem) for elem in ctor["invariants"] ]
+                        [exp  for elem in ctor["invariants"] for exp in parse_invariants(elem)] 
                         )
 
 def parse_behavior(behv: Dict) -> Behavior:
@@ -422,5 +422,37 @@ def parse_stateupdate(update: Dict) -> Exp:
                 )
     else: 
         assert False, "unsupported StorageItem type: " + update["location"]["type"]
-                
+
+def parse_initstore(initstore: Dict) ->  Exp:    
+    assert "location" in initstore, "Missing 'location' key"    
+    assert "value" in initstore, "Missing 'value' key"  
+    assert "type" in initstore["location"]  , "Missing 'type' key"
+
+    if initstore["location"]["type"]== "int": 
+        return Eq(
+                StorageItem(
+                    parse_storageloc(initstore["location"]), 
+                    Pre(),
+                    ActInt()
+                ), 
+                parse_exp(initstore["value"])
+                )
+    elif initstore["location"]["type"]== "bool":
+        return Eq(
+                StorageItem(
+                    parse_storageloc(initstore["location"]), 
+                    Pre(),
+                    ActBool()
+                ), 
+                parse_exp(initstore["value"])
+                )
+    else: 
+        assert False, "unsupported StorageItem type: " + initstore["location"]["type"]
+
+def parse_invariants(inv: Dict) -> List[Exp]:
+    assert "kind" in inv, "Missing 'kind' key"    
+    assert inv["kind"]=="Invariant", "not of kind invariant"  
+    assert "predicate" in inv, "Missing 'predicate' key"
+
+    return [parse_exp(elem) for elem in inv["predicate"] ]
 
