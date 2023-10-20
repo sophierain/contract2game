@@ -26,7 +26,7 @@ postbool = z3.Function("postbool", z3.BoolSort(), z3.BoolSort())
 @dataclass
 class SymState:
     storage: SymStore
-    constraints: Set[Boolean]
+    constraints: List[Boolean]
 
 
 @dataclass
@@ -38,12 +38,12 @@ class Tree:
 
 
 
-def extract_constraints(behv: Behavior) -> Set[Exp]:
+def extract_constraints(behv: Behavior) -> List[Exp]:
     """Returns the constraints from a behavior that are relevant for the consruction of the game tree"""
-    return set(behv.caseConditions + behv.preConditions + behv.stateUpdates)
+    return behv.caseConditions + behv.preConditions + behv.stateUpdates
 
 
-def apply_behaviour(state: SymState, history: List[str], contr: Constructor, behv: Behavior) -> SymState:
+def apply_behaviour(state: SymState, history: List[str], contract_name: str, contr: Constructor, behv: Behavior) -> SymState:
     """apply behavior 'behv' to the state 'state'"""
 
     new_storage = gen_poststore(state.storage, behv.name)
@@ -64,12 +64,99 @@ def apply_behaviour(state: SymState, history: List[str], contr: Constructor, beh
     for exp in behv.stateUpdates:
         update_constraints = constraints.add(to_smt(state.storage, new_storage, history + [behv.name], exp))
    
-    no_update_constraints = no_update(state.storage, new_storage, behv.name, update_constraints)
+    no_update_constraints = no_update(state.storage, new_storage, behv.name, behv.stateUpdates)
 
-    return SymState(new_storage, constraints + update_constraints + no_update_constraints) # + operator for sets?
+    return SymState(new_storage, constraints.union(update_constraints.union(no_update_constraints))) 
 
-def no_update(prestore: SymStore, poststore: SymStore, behv_name: str, updates: Set[Boolean]) -> Set[Boolean]:
+def no_update(prestore: SymStore, poststore: SymStore, history: List[str], updates: List[Exp]) -> List[Boolean]:
+    """Identifies all SymVars from poststore that are not assigned a new value in the updates contraints.
+    Returns a list of constraints that assert the not-updated poststore Symvars have the same value as the 
+    respective prestore symvars.
+    Only add the constraints for the main contract, others irrelevant
+    """
+
+    noup = copy_symstore(prestore)
+    supp_fctargs = dict()
+
+    for update in updates:
+        assert isinstance(update, Eq)
+        item = update.left
+        assert isinstance(item, StorageItem)
+        loc = item.loc
+
+        # search loc in postStore
+        if isinstance(loc, VarLoc):
+            del noup[loc.contract][loc.name]
+        elif isinstance(loc, MappingLoc):
+            keys = []
+            new_loc = loc.loc
+            while isinstance(new_loc, ContractLoc):
+                # contractloc case:
+                keys = [new_loc.field] + keys
+                new_loc = new_loc.loc
+            #varloc case:
+            assert isinstance(new_loc, VarLoc)
+            keys = [new_loc.contract, new_loc.name] + keys
+            if keys in supp_fctargs:
+                supp_fctargs[keys].append([to_smt(prestore, poststore, history, elem) for elem in loc.args])
+            else:
+                supp_fctargs[keys] = [[to_smt(prestore, poststore, history, elem) for elem in loc.args]]
+        else: 
+            # contractloc case
+            keys = []
+            while isinstance(loc, ContractLoc):
+                keys = [new_loc.field] + keys
+                loc = loc.loc
+            # reached varloc
+            assert isinstance(new_loc, VarLoc)
+            keys = [loc.contract, loc.name] + keys
+            store = noup #shallow copy on purpose
+            last_key = keys[-1]
+            keys = keys[:-1]
+            for elem in keys:
+                store = store[elem]
+
+            del store[last_key] # through call by reference noup was shrinked as intended
+
+    constraints = []
+    for key, value in noup:
+        constraints.extend(noup_cons(value, poststore[key], supp_fctargs, [key]))
+
+    return constraints
+
+def noup_cons(prestore: PreStore,
+              poststore: PreStore, 
+              fsupp: Dict[ List[str],List[List[Integer | Boolean]]],
+              path: List[str]
+              )                                                    -> List[Boolean]:
+
+    constraints = []
+    for key, value in prestore:    
+        if isinstance(value, Integer) or isinstance(value, Boolean):
+            constraints.append(poststore[key] == value)
+        elif isinstance(value, z3.FuncDeclRef):
+            constraints.append(func_update(value, poststore[key], fsupp[path + [key]]))
+        else:
+            constraints.extend(noup_cons(value, poststore[key], fsupp, path + [key]))
+
+    return constraints
+
+def func_update(pref: z3.FuncDeclRef, postf: z3.FuncDeclRef, exc: List[List[Integer | Boolean]]) -> Boolean:
+    """ construct forall quantified formula stating 'pref'=='postf' everywhere except on the 'exc' points"""
     pass
+
+
+def copy_symstore(store: PreStore | SymStore) -> PreStore | SymStore:
+
+    scopy = dict()
+    for key, value in store.items():
+        if isinstance(value, Dict):
+            scopy[key] = copy_symstore(value)
+        else: 
+            scopy[key] = value
+
+    return scopy
+
 
 def gen_poststore(pre: Union[SymStore,PreStore], name: str) -> Union[SymStore,PreStore]:
     post = dict()
@@ -125,7 +212,7 @@ def init_state(storage: Storage, ctor: Constructor, extraConstraints: Set[Exp]) 
     for exp in extraConstraints:
         smt_constraints.append(to_smt(store, [], exp))
 
-    return SymState(store, set(smt_constraints))
+    return SymState(store, smt_constraints)
 
 
 def contract2tree(contract: Contract, storage: Storage) -> Tree:
@@ -242,7 +329,7 @@ def to_smt(store: SymStore, history: List[str], exp: Exp) -> Integer | Boolean:
             return z3.Int(to_label(history, exp.name))
        
     elif isinstance(exp, StorageItem):
-        result = generate_smt_storageloc(store, history, exp.loc)
+        result = generate_smt_storageloc(store, history, exp.loc) # to be adapted!
         if isinstance(exp.time, Post): # cannot work this way
             if isinstance(exp.type, ActBool):
                 return postbool(result)
