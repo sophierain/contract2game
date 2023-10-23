@@ -456,3 +456,9 @@ def parse_invariants(inv: Dict) -> List[Exp]:
 
     return [parse_exp(elem) for elem in inv["predicate"] ]
 
+def parse_constraints_json(constraints: List) -> List[Exp]:
+    res: List[Exp] = []
+    for elem in constraints:
+        parse_exp(elem)
+
+    return res

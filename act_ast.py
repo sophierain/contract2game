@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Generator
 
 
 
@@ -14,7 +14,7 @@ class Act:
     store: Storage
     contracts: List[Contract]
 
-    def find_maincontract(self)-> Contract:
+    def find_maincontract(self)-> Generator[Contract, None, None]:
         not_main = []
         for key, value in self.store.items():
             for nested_key, nested_value in value.items():
