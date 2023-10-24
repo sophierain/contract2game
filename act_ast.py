@@ -167,6 +167,10 @@ class ActBool(ActType):
 class ActInt(ActType):
     """act int type"""
 
+@dataclass
+class ActByteStr(ActType):
+    """act bytestring type"""
+
 
 
 

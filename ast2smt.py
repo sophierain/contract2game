@@ -11,7 +11,8 @@ import logging
 
 Integer = Union[int, z3.ArithRef]
 Boolean = Union[bool, z3.BoolRef]
-SymVar = Union[Integer, Boolean, z3.FuncDeclRef] 
+SymVar = Union[Integer, Boolean, z3.FuncDeclRef, z3.SeqRef] 
+#is_string, is_int, is_bool are the type check calls
 
 PreStore = Dict[str, Union[SymVar, 'PreStore']]
 SymStore = Dict[str, PreStore]
@@ -35,6 +36,24 @@ class Tree:
     children: Dict[str, 'Tree']
     case: List[Boolean]
 
+    def __repr__(self, level = 0) -> str:
+        
+        indent = "   "*level
+        res = f"{indent}State: \n"
+        res = res + f"{indent}   Storage:\n"
+        for key, value in self.state.storage.items():
+            res = res + f"      {indent}{key}: {value}\n"
+        res = res + f"{indent}   Constraints:\n"
+        for elem in self.state.constraints:
+            res = res + f"{indent}      {elem}\n"
+        res = res + f"{indent}Children:\n"
+        for key, value in self.children.items():
+            res = res + f"{indent}   {key}:\n{value.__repr__(level + 1)}\n"
+        res = res +f"{indent}Case:"
+        for elem in self.case:
+            res = res + f"\n{indent}   {elem}"
+
+        return res
 
 
 # main functions
@@ -76,7 +95,7 @@ def generate_tree(constraints: List[Boolean],
     children_solver.add(*constraints)
     children: Dict[str, Tree] = dict()
     for behv in behvs:
-        child_name = behv.name + str(behv.caseConditions)
+        child_name = behv.name + "__" + str(behv.caseConditions)
         # naive breaking condition: no 2 functions (behavior) can be called twice
         if not child_name in history:
             child, child_case = apply_behaviour(prestate, history + [child_name], contract_name, contr, behv)
@@ -107,6 +126,8 @@ def slottype2smt(contract: str, name: str, slot: SlotType, storage: Storage) -> 
         return z3.Int(var_name)
     elif isinstance(slot, AbiBoolType):
         return z3.Bool(var_name)
+    elif isinstance(slot, AbiStringType):
+        return z3.String(var_name)
 
     elif isinstance(slot, ContractType): 
         assert slot.contract in storage #repeat stuff with storage[slot.contract] and add contract to the storage label
@@ -180,12 +201,16 @@ def to_smt(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp
     elif isinstance(exp, Var): 
         if isinstance(exp.type, ActBool):
             return z3.Bool(to_label(history, exp.name))
+        elif isinstance(exp.type, ActByteStr):
+            return z3.String(to_label(history, exp.name))
         else:
             return z3.Int(to_label(history, exp.name))
     
     elif isinstance(exp, EnvVar): 
         if isinstance(exp.type, ActBool):
             return z3.Bool(to_label(history, exp.name))
+        elif isinstance(exp.type, ActByteStr):
+            return z3.String(to_label(history, exp.name))
         else:
             return z3.Int(to_label(history, exp.name))
        
@@ -221,13 +246,15 @@ def to_smt(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp
     elif isinstance(exp, Eq):
         both_bool = isinstance(exp.left.type, ActBool) and isinstance(exp.right.type, ActBool)
         both_int = isinstance(exp.left.type, ActInt) and isinstance(exp.right.type, ActInt)
-        assert both_bool or both_int, "left and right have to be of the same type"
+        both_bytestr = isinstance(exp.left.type, ActByteStr) and isinstance(exp.right.type, ActByteStr)
+        assert both_bool or both_int or both_bytestr, "left and right have to be of the same type"
         return to_smt(prestore, poststore, history, exp.left) == to_smt(prestore, poststore, history, exp.right)
 
     elif isinstance(exp, Neq):
         both_bool = isinstance(exp.left.type, ActBool) and isinstance(exp.right.type, ActBool)
         both_int = isinstance(exp.left.type, ActInt) and isinstance(exp.right.type, ActInt)
-        assert both_bool or both_int, "left and right have to be of the same type"
+        both_bytestr = isinstance(exp.left.type, ActByteStr) and isinstance(exp.right.type, ActByteStr)
+        assert both_bool or both_int or both_bytestr, "left and right have to be of the same type"
         return z3.Not(to_smt(prestore, poststore, history, exp.left) == 
                       to_smt(prestore, poststore, history, exp.right))
 
@@ -375,27 +402,29 @@ def gen_poststore(pre: PreStore, name: str) -> PreStore:
                 z3sorts = []
                 arity = value.arity()
                 for i in range(arity):
-                    if value.domain(i) == bool:
+                    if value.domain(i) == z3.BoolSort():
                         z3sorts.append(z3.BoolSort()) 
-                    elif value.domain(i) == int:
+                    elif value.domain(i) == z3.IntSort():
                         z3sorts.append(z3.IntSort())
                     else: 
                         assert False, "sorts other than int or bool not supported"
-                if value.range() == bool:
+                if value.range() == z3.BoolSort():
                     z3sorts.append(z3.BoolSort()) 
-                elif value.range() == int:
+                elif value.range() == z3.IntSort():
                     z3sorts.append(z3.IntSort())
                 else: 
                     assert False, "sorts other than int or bool not supported"
 
                 post[key] = z3.Function(name + "_" + value.name(), *z3sorts) 
             
-            elif isinstance(value, z3.ArithRef):
-                post[key] = z3.ArithRef(name + "_" + value.decl().name())
-            elif isinstance(value, z3.BoolRef):
-                post[key] = z3.BoolRef(name + "_" + value.decl().name())
+            elif z3.is_int(value):
+                post[key] = z3.Int(name + "_" + value.decl().name())
+            elif z3.is_bool(value):
+                post[key] = z3.Bool(name + "_" + value.decl().name())
+            elif z3.is_string(value):
+                post[key] = z3.String(name + "_" + value.decl().name())
             else: 
-                assert False, "storage items have to be either z3 bool, z3 int or z3 functions"
+                assert False, "unsupported z3 type: " + type(value)
         else:
             post[key] = gen_poststore(value, name)
 
@@ -412,7 +441,7 @@ def no_update(prestore: SymStore, poststore: SymStore, history: List[str], main_
     noup_all = copy_symstore(prestore)
     # delete redundant info - variables of other than main contract, the accessed ones will appear in a nested dict 
     noup = noup_all[main_contr]
-    supp_fctargs: Dict[List[str], List[List[Integer | Boolean]]] = dict() 
+    supp_fctargs: Dict[str, List[List[Integer | Boolean]]] = dict() 
 
 
     for update in updates:
@@ -426,15 +455,18 @@ def no_update(prestore: SymStore, poststore: SymStore, history: List[str], main_
             assert isinstance(noup, Dict)
             del noup[loc.name]
         elif isinstance(loc, MappingLoc):
-            keys: List[str] = []
+            keys: str = ""
             new_loc = loc.loc
             while isinstance(new_loc, ContractLoc):
                 # contractloc case:
-                keys = [new_loc.field] + keys
+                if keys == "":
+                    keys = new_loc.field
+                else:
+                    keys = new_loc.field + "_" + keys
                 new_loc = new_loc.loc
             #varloc case:
             assert isinstance(new_loc, VarLoc)
-            keys = [new_loc.name] + keys
+            keys = new_loc.name + "_" + keys
             if keys in supp_fctargs:
                 supp_fctargs[keys].append([to_smt(prestore, poststore, history, elem) for elem in loc.args])
             else:
@@ -443,7 +475,7 @@ def no_update(prestore: SymStore, poststore: SymStore, history: List[str], main_
             # contractloc case
             keys = []
             while isinstance(loc, ContractLoc):
-                keys = [loc.field] + keys
+                keys = [loc.field] +  keys
                 loc = loc.loc
             # reached varloc
             assert isinstance(loc, VarLoc)
@@ -459,28 +491,33 @@ def no_update(prestore: SymStore, poststore: SymStore, history: List[str], main_
             del store[last_key] # through call by reference noup was shrinked as intended
 
     assert isinstance(noup, Dict)
-    constraints = noup_cons(noup, poststore[main_contr], supp_fctargs, [])
+    constraints = noup_cons(noup, poststore[main_contr], supp_fctargs, "")
 
     return constraints
 
 
 def noup_cons(prestore: PreStore,
               poststore: PreStore, 
-              fsupp: Dict[ List[str],List[List[Integer | Boolean]]],
-              path: List[str]
+              fsupp: Dict[str, List[List[Integer | Boolean]]],
+              path: str
               )                                                    -> List[Boolean]:
 
     constraints = []
-    for key, value in prestore.items():    
+    for key, value in prestore.items():  
+        if path == "":
+            path = key
+        else:
+            path = path + "_" + key  
         if isinstance(value, int) or z3.is_int(value) \
             or isinstance(value, bool) or z3.is_bool(value):
             constraints.append(poststore[key] == value)
         elif isinstance(value, z3.FuncDeclRef):
-            constraints.append(func_update(value, poststore[key], fsupp[path + [key]]))
+            print(fsupp)
+            constraints.append(func_update(value, poststore[key], fsupp.get(path, [])))
         else:
             assert isinstance(poststore[key], Dict)
             assert isinstance(value, Dict)
-            constraints.extend(noup_cons(value, poststore[key], fsupp, path + [key]))
+            constraints.extend(noup_cons(value, poststore[key], fsupp, path))
 
     return constraints
 
@@ -556,17 +593,21 @@ def to_label(history: List[str], name: str) -> str:
     label = ""
 
     for elem in history:
-        label = label + ";" + elem
+        label = label + elem + ";"
 
-    label = label + ";" + name
+    label = label[:-1]
+    label = label + "::" + name
     return label
 
 def from_label(label: str) -> Tuple[List[str], str]:
 
     res = label.split(";")
     assert len(res) > 0
+    name = res[-1].split("::")
+    assert len(name) == 2
+    hist = res[:-1] + name[0]
 
-    return res[:-1], res[-1]
+    return hist, name[1]
 
 def to_storage_label(contract: str, name: str) -> str:
     return contract + "." + name

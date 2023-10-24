@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 import itertools
 import json
-from act_ast import Contract, LitBool, And
+from act_ast import *
 from parse_act import parse_act_json, parse_constraints_json
 from ast2smt import *
 
@@ -42,13 +42,5 @@ for considered_contract in act.find_maincontract():
 
 
 
-
-
-# print(considered_contract)
-
-x=LitBool(True)
-y=And(x, x)
-
-z = And(LitBool(True), LitBool(True))
-    
-print(z)
+for tree in act_trees:
+       print(tree)
