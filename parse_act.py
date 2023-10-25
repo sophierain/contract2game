@@ -2,7 +2,6 @@ from act_ast import *
 from typing import Dict, List
 
 def parse_act_json(obj: Dict) -> Act:
-    # assert 'store' in obj, "message"
     assert obj["kind"]=="Act", "'kind' key does not match 'Act'"
     assert "store" in obj, "Missing 'store' key"
     assert "contracts" in obj, "Missing 'contracts' key"
@@ -25,6 +24,7 @@ def parse_store(store: Dict) -> Storage:
 
     return store_dict
 
+
 def parse_slottype(input: List) -> SlotType:
 
     assert len(input)==2, "incorrect storage variable format"
@@ -44,6 +44,7 @@ def parse_slottype(input: List) -> SlotType:
     else:
         assert False, "Unsupported slottype: " + slottype["kind"] 
         
+
 def parse_valuetype(valuetype: Dict) -> ValueType:
     assert "kind" in valuetype,"Missing 'kind' key"
 
@@ -57,6 +58,7 @@ def parse_valuetype(valuetype: Dict) -> ValueType:
     
     else:
         assert False, "Unsupported value type: " + valuetype["kind"]
+
 
 def parse_abitype(abi: Dict) -> AbiType:
     assert "type" in abi, "Missing 'type' key"
@@ -93,7 +95,6 @@ def parse_abitype(abi: Dict) -> AbiType:
         assert False, "Unsupported abi type: " + abi["type"]
     
     
-
 def parse_contract(contract: Dict) -> Contract:
     
     assert contract["kind"]=="Contract", "'kind' key does not match 'Contract'"
@@ -102,7 +103,6 @@ def parse_contract(contract: Dict) -> Contract:
     assert "contract" in contract["constructor"], "Missing 'contract' key at 'contract['constructor']'"
 
     return Contract(contract["constructor"]["contract"], parse_constructor(contract["constructor"]), [parse_behavior(elem) for elem in contract["behaviours"]])
-
 
 
 def parse_constructor(ctor: Dict)-> Constructor:
@@ -122,8 +122,8 @@ def parse_constructor(ctor: Dict)-> Constructor:
                         [exp  for elem in ctor["invariants"] for exp in parse_invariants(elem)] 
                         )
 
+
 def parse_behavior(behv: Dict) -> Behavior:
-    # kind Behaviour
     assert behv["kind"]=="Behaviour", "'kind' key does not match 'Behaviour'"
     assert "name" in behv, "Missing 'name' key"
     assert "interface" in behv, "Missing 'interface' key"
@@ -132,7 +132,6 @@ def parse_behavior(behv: Dict) -> Behavior:
     assert "postConditions" in behv, "Missing 'postConditions' key"
     assert "returns" in behv, "Missing 'returns' key"
     assert "stateUpdates" in behv, "Missing 'stateUpdates' key"
-
 
     return Behavior(
                     behv["name"],
@@ -144,13 +143,15 @@ def parse_behavior(behv: Dict) -> Behavior:
                     [parse_stateupdate(elem) for elem in behv["stateUpdates"] ]
                     )
 
+
 def parse_interface(interface: Dict) -> Interface:
     assert "kind" in interface, "Missing 'kind' key"
     assert interface["kind"]=="Interface", "Unexpected 'kind': " + interface["kind"]+", expected 'Interface'"
     assert "id" in interface, "Missing 'id' key"
     assert "args" in interface, "Missing 'args' key"
     return Interface(interface["id"], [parse_decl(elem) for elem in interface["args"]])
-                     
+
+
 def parse_decl(decl: Dict) -> Decl:
     assert "kind" in decl, "Missing 'kind' key"
     assert decl["kind"]=="Declaration", "Unexpected 'kind': " + decl["kind"]+", expected 'Declaration'"
@@ -158,48 +159,17 @@ def parse_decl(decl: Dict) -> Decl:
     assert "abitype" in decl, "Missing 'abitype' key"
     return Decl(decl["id"], parse_abitype(decl["abitype"])) 
 
-# the following code expects all input to be dicts
-# either a base case dict:
-#   "literal": "x",
-#   "type": 'int"
-# or another base case dict:
-#   "var": "x",
-#   "type": "bool"
-# or yet another base case dict:
-#   "envValue": "x",
-#   "type": "int" or "bool"
-# or  for storageitems:
-#   "entry": Dict,
-#   "timing": "Pre" or "Post"
-#
-# or recursive case containing
-#           "symbol": "<=",
-#           "args": [...],
-#           "type": "int"
-
-
 
 def parse_boolexp(boolexp: Dict) -> Exp:
     res = parse_exp(boolexp)
     assert res.type == ActBool(), "not a boolean expression"
     return res
 
+
 def parse_intexp(intexp: Dict) -> Exp:
     res = parse_exp(intexp)
     assert res.type == ActInt(), "not an integer expression"
     return res
-
-# def parse_typedexp(texp: Dict) -> Exp:
-
-#     assert "type" in texp, "Missing 'type' key"    
-#     assert "expression" in texp, "Missing 'expression' key"
-    
-#     if texp["type"] == "AInteger":
-#         return parse_intexp(texp["expression"])
-#     elif texp["type"] == "ABoolean":
-#         return parse_boolexp(texp["expression"])
-#     else:
-#         assert False, "Unsupported type: " + texp["type"]
 
 
 def parse_exp(exp: Dict) -> Exp:
@@ -221,14 +191,14 @@ def parse_exp(exp: Dict) -> Exp:
     else:
         # Base Case
         if "literal" in keys:
-            # Literal; either int or bool
+            # Literal; either int, bool or bytestring
             assert "type" in keys, "Missing 'type' key" 
             if exp["type"] == "int":
                 return Lit(int(exp["literal"]), ActInt())
             elif exp["type"] == "bool":
                 return Lit(bool(exp["literal"]), ActBool())
             elif exp["type"] == "bytestring":
-                return Lit(bool(exp["literal"]), ActByteStr())
+                return Lit(str(exp["literal"]), ActByteStr())
             else:
                 assert False, "unsupported literal type"
 
@@ -281,7 +251,8 @@ def parse_exp(exp: Dict) -> Exp:
                     assert False, "unsupported 'type' value: " + exp["entry"]["type"] 
             else:
                 assert False, "unsupported 'timing' value: " + exp["timing"] 
-        elif "expression" in keys:
+
+        elif "expression" in keys: 
             return parse_exp(exp["expression"])
         else:
             assert False, "unknown expression:" + str(exp)
@@ -311,101 +282,94 @@ def parse_storageloc(sloc: Dict) -> StorageLoc:
     else:
         assert False, "unsupported storage kind: " + sloc["kind"]
 
+
 def parse_symbol(symbol: str, args: List[Exp])-> Exp:    
 
         if symbol == "+":
             assert  len(args) == 2, "two arguments expected for +"
             assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
-            return Add(*args)
+            return Add(args[0],args[1])
         elif symbol == "-":
             assert len(args) == 2, "two arguments expected for -"
             assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
-            return Sub(*args)
+            return Sub(args[0], args[1])
         elif symbol == "*":
             assert len(args) == 2, "two arguments expected for *"
             assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
-            return Mul(*args)
+            return Mul(args[0], args[1])
         elif symbol == "/":
             assert len(args) == 2, "two arguments expected for /"
             assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
-            return Div(*args)
+            return Div(args[0], args[1])
         elif symbol == "^":
             assert len(args) == 2, "two arguments expected for ^"
             assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
-            return Pow(*args)
+            return Pow(args[0], args[1])
        
 
         elif symbol == "ite":
             assert len(args) == 3, "three arguments expected for 'ite'"
             assert isinstance(args[0].type, ActBool),"expected boolean condition"
             if all(isinstance(elem.type, ActInt) for elem in args[1:]): 
-                return ITE(*args, ActInt())
+                return ITE(args[0], args[1], args[2], ActInt())
             elif all(isinstance(elem.type, ActBool) for elem in args):
-                return ITE(*args, ActBool())
+                return ITE(args[0], args[1], args[2], ActBool())
             elif all(isinstance(elem.type, ActByteStr) for elem in args[1:]):
-                return ITE(*args, ActBool())
+                return ITE(args[0], args[1], args[2], ActByteStr())
             else:
-                assert False, "Unsupported or not matching argument types: " + args[1].type + ", " + args[2].type
+                assert False, "Unsupported or not matching argument types: " + str(args[1].type) + ", " + str(args[2].type)
 
         elif symbol == "=/=":
             assert len(args) == 2, "two arguments expected for '=/='"
             all_bool = all(isinstance(elem.type, ActBool) for elem in args)
             all_int = all(isinstance(elem.type, ActInt) for elem in args)
             all_bytestring = all(isinstance(elem.type, ActByteStr) for elem in args)
-            assert all_bool or all_int or all_bytestring, "expected all boolean or all integer expression arguments" 
-            return Neq(*args)
+            assert all_bool or all_int or all_bytestring, "expected arguments to be of same type" 
+            return Neq(args[0], args[1])
         elif symbol == "==":
             assert len(args) == 2, "two arguments expected for '=='"
             all_bool = all(isinstance(elem.type, ActBool) for elem in args)
             all_int = all(isinstance(elem.type, ActInt) for elem in args)
             all_bytestring = all(isinstance(elem.type, ActByteStr) for elem in args)
-            assert all_bool or all_int or all_bytestring, "expected all boolean or all integer expression arguments" 
-            return Eq(*args)
+            assert all_bool or all_int or all_bytestring, "expected arguments to be of same type" 
+            return Eq(args[0], args[1])
 
         elif symbol == "and":
             assert len(args) == 2, "two arguments expected for 'and'"
             assert all(isinstance(elem.type, ActBool) for elem in args), "expected boolean expression arguments" 
-            return And(*args)
+            return And(args[0], args[1])
         elif symbol == "or":
             assert len(args) == 2, "two arguments expected for 'or'"
             assert all(isinstance(elem.type, ActBool) for elem in args), "expected boolean expression arguments" 
-            return Or(*args)
+            return Or(args[0], args[1])
         elif symbol == "not":
             assert len(args) == 1, "one argument expected for 'not'"
             assert all(isinstance(elem.type, ActBool) for elem in args), "expected boolean expression arguments" 
-            return Not(*args)
+            return Not(args[0])
         elif symbol == "=>":
             assert len(args) == 2, "two arguments expected for '=>'"
             assert all(isinstance(elem.type, ActBool) for elem in args), "expected boolean expression arguments" 
-            return Implies(*args)
+            return Implies(args[0], args[1])
 
         elif symbol == "<":
             assert len(args) == 2, "two arguments expected for '<'"
             assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
-            return Lt(*args)
+            return Lt(args[0], args[1])
         elif symbol == ">":
             assert len(args) == 2, "two arguments expected for '>'"
             assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
-            return Gt(*args)
+            return Gt(args[0], args[1])
         elif symbol == "<=":
             assert len(args) == 2, "two arguments expected for '<='"
             assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
-            return Le(*args)
+            return Le(args[0], args[1])
         elif symbol == ">=":
             assert len(args) == 2, "two arguments expected for '>='"
             assert all(isinstance(elem.type, ActInt) for elem in args), "expected integer expression arguments" 
-            return Ge(*args)
+            return Ge(args[0], args[1])
         else:
             assert False, "Unsupported symbol: " + symbol
 
-# remove constant 'blocks' from json, 
-# rewrites are thus the only remaining stateupdates and hence the word rewrite can go away
-# expect:
-#   "location": StorageLocation
-#   "value": Expression
-# build an equality constraint:
-#   post of location = value
-# hence this is storageItem with loc=location
 
 def parse_stateupdate(update: Dict) -> Exp:
 
@@ -444,6 +408,7 @@ def parse_stateupdate(update: Dict) -> Exp:
     else: 
         assert False, "unsupported StorageItem type: " + update["location"]["type"]
 
+
 def parse_initstore(initstore: Dict) ->  Exp:    
     assert "location" in initstore, "Missing 'location' key"    
     assert "value" in initstore, "Missing 'value' key"  
@@ -480,12 +445,14 @@ def parse_initstore(initstore: Dict) ->  Exp:
     else: 
         assert False, "unsupported StorageItem type: " + str(initstore["location"]["type"])
 
+
 def parse_invariants(inv: Dict) -> List[Exp]:
     assert "kind" in inv, "Missing 'kind' key"    
     assert inv["kind"]=="Invariant", "not of kind invariant"  
     assert "predicate" in inv, "Missing 'predicate' key"
 
     return [parse_exp(elem) for elem in inv["predicate"] ]
+
 
 def parse_constraints_json(constraints: List) -> List[Exp]:
     res: List[Exp] = []

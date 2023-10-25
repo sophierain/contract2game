@@ -178,7 +178,7 @@ class ActByteStr(ActType):
 
 @dataclass
 class Lit(Exp):
-    value: Union[bool, int]
+    value: Union[bool, int, str]
     type: ActType
 
 @dataclass
@@ -236,7 +236,7 @@ class Neq(Exp):
 @dataclass
 class InRange(Exp):
     expr: Exp
-    abitype: AbiType # only allow (int, uint, address) 
+    abitype: AbiType # only allow (int, uint, address, string) 
     type: ActType = ActBool()
     
 

@@ -6,21 +6,14 @@ output: a tree of possible function calls
 """
 from __future__ import annotations
 
-from abc import ABCMeta, abstractmethod
-import itertools
 import json
 from act_ast import *
 from parse_act import parse_act_json, parse_constraints_json
 from ast2smt import *
-
-
-from typing import Any, Dict, Iterable, List, Union
-import z3
-
-#path = input("path to json respresenation of act specification\n")
-#path = "act_examples/smoke/smoke.act.typed.json"
-#path = "act_examples/token/transfer.act.typed.json"
 from sys import argv
+
+
+
 path = argv[1]
 
 obj = json.load(open(path))
@@ -42,5 +35,5 @@ for considered_contract in act.find_maincontract():
 
 
 
-for tree in act_trees:
-       print(tree)
+# for tree in act_trees:
+#        print(tree)
