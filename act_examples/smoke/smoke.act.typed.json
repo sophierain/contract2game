@@ -76,7 +76,7 @@
       ],
       "constructor": {
         "contract": "A",
-        "initial_storage": [],
+        "initialStorage": [],
         "interface": {
           "args": [],
           "id": "\"A\"",

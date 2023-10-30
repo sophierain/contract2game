@@ -4548,7 +4548,7 @@
       ],
       "constructor": {
         "contract": "Token",
-        "initial_storage": [
+        "initialStorage": [
           {
             "location": {
               "item": {
@@ -4601,7 +4601,7 @@
                       "type": "int"
                     },
                     "kind": "TypedExpr",
-                    "type": "AInteger"
+                    "type": "int"
                   }
                 ],
                 "kind": "Mapping",

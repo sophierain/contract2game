@@ -34,6 +34,7 @@ for considered_contract in act.find_maincontract():
        act_trees.append(contract2tree(considered_contract, act.store, extra_constraints))
 
 
+for tree in act_trees:
+      tree.structure()
 
-# for tree in act_trees:
-#        print(tree)
+

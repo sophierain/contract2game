@@ -31,7 +31,7 @@ class SymState:
 
 @dataclass
 class Tree:
-    """a non-leaf node with children"""
+    """a node with possibly 0 children"""
     state: SymState
     children: Dict[str, 'Tree']
     case: List[Boolean]
@@ -55,19 +55,39 @@ class Tree:
 
         return res
 
+    def structure(self, level: int = 0):
+        for key, value in self.children.items():
+                print(level*"   " + key)
+                value.structure(level + 1)
+        return
 
 # main functions
 
 def contract2tree(contract: Contract, storage: Storage, extra_constraints: List[Exp]) -> Tree:
-    """ translates the contract to the tree of all possible sequential executions of the differnt behaviors"""
+    """ 
+    contract: contract to be analyzed
+    storage: storage dict of contract, contains all variables to be considered
+    extra_constraints: a list of user defined constraints to be enforced as preconditions
+
+    returns: a tree containg all possible sequential executions of the differnt behaviors of the contract
+    
+    """
 
     root = init_state(storage, contract.constructor, extra_constraints)
     
-    return generate_tree([], root, [], [], contract.name, contract.constructor, contract.behaviors)
+    return generate_tree([], root.storage, root, [], [], contract.name, contract.constructor, contract.behaviors)
 
 
 def init_state(storage: Storage, ctor: Constructor, extraConstraints: List[Exp]) -> SymState:
-    """translate storage information to smt concepts, and collect initial constraints from user and invariants"""
+    """
+    storage: storage dict of contract, contains all variables to be considered
+    ctor: constructor of the contract, might be used later
+    extra_constraints: a list of user defined constraints to be enforced as preconditions
+
+    returns: a symstate containing translated storage information to smt concepts, 
+             and collected initial constraints from user
+    
+    """
     store: Dict = dict()
     for key, value in storage.items():
         store[key] = dict()
@@ -83,6 +103,7 @@ def init_state(storage: Storage, ctor: Constructor, extraConstraints: List[Exp])
 
 def generate_tree(
                   constraints: List[Boolean], 
+                  initstore: SymStore,
                   prestate: SymState, 
                   case_cond: List[Boolean], 
                   history: List[str], 
@@ -96,13 +117,14 @@ def generate_tree(
     children_solver.add(*constraints)
     children: Dict[str, Tree] = dict()
     for behv in behvs:
-        child_name = behv.name + "__" + str(behv.caseConditions)
+        child_name = behv.name + "__" + to_node_name(behv.caseConditions, initstore)
         # naive breaking condition: no 2 functions (behavior) can be called twice
         if not child_name in history:
             child, child_case = apply_behaviour(prestate, history + [child_name], contract_name, contr, behv)
             reachable = children_solver.check(child.constraints)
             if reachable == z3.sat:
                 children[child_name] = generate_tree(constraints + prestate.constraints, 
+                                                     initstore,
                                                     child, 
                                                     child_case,
                                                     history + [child_name],
@@ -172,6 +194,7 @@ def to_bool(prestore: SymStore, poststore: SymStore, history: List[str], exp: Ex
     assert isinstance(res, bool) or isinstance(res, z3.BoolRef), "boolean expression expected"
     return res
 
+
 def to_int(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp) -> Integer:
     res = to_smt(prestore, poststore, history, exp)
     assert isinstance(res, int) or isinstance(res, z3.ArithRef), "integer expression expected"
@@ -180,34 +203,32 @@ def to_int(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp
 
 def to_smt(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp) -> Integer | Boolean | String:
     """
-    supported Boolean operations:
+    supported operations:
         Lit
         Var
         EnvVar
         StorageItem
+
         And
         Or
         Not
         Implies
+
         ITE
         Eq 
         Neq 
         InRange
+
         Lt
         Le
         Gt
         Ge
-    supported Integer operations:  
-        LitInt
-        VarInt
-        EnvVarInt
-        StorageItem
+
         Add
         Sub
         Mul
         Div
         Pow 
-        ITE
     """
     # variables, constants, functions
 
@@ -342,8 +363,7 @@ def to_smt(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp
 
     else:
         assert False 
-  
-        
+     
 
 def apply_behaviour(state: SymState,
                     history: List[str], 
@@ -412,7 +432,8 @@ def generate_smt_storageloc(
                     collect_list_of_keys = [loc.field] + collect_list_of_keys
                 else:
                     assert False, "mappings returning contracts is currently not implemented"
-            collect_list_of_keys = [loc.loc.name] + collect_list_of_keys
+            print("orange")
+            collect_list_of_keys = [loc.loc.contract, loc.loc.name] + collect_list_of_keys
 
             return walk_the_storage(store[collect_list_of_keys[0]], collect_list_of_keys[1:])
 
@@ -633,4 +654,125 @@ def from_label(label: str) -> Tuple[List[str], str]:
 
 def to_storage_label(contract: str, name: str) -> str:
     return contract + "." + name
+
+def to_node_name(case: List[Exp], initstore: SymStore)-> str:
+
+    smt_case = [str(to_node_smt(elem)) for elem in case]
+    name = ", ".join(smt_case)
+    return name
+
+def to_node_smt(exp: Exp)-> str:
+    if isinstance(exp, Lit):
+        return str(exp.value)
+    
+    elif isinstance(exp, Var): 
+        return str(exp.name)
+    
+    elif isinstance(exp, EnvVar): 
+        return str(exp.name)
+       
+    elif isinstance(exp, StorageItem):
+        gen_storeloc = storageloc2node(exp.loc, exp.time) 
+        return gen_storeloc
+    
+    # boolean expressions
+
+    elif isinstance(exp, And):
+        return "(" + to_node_smt(exp.left) + " and " +to_node_smt(exp.right) +")"
+    
+    elif isinstance(exp, Or):
+        return "(" + to_node_smt(exp.left) + " or " +to_node_smt(exp.right) +")"
+    
+    elif isinstance(exp, Not):
+        return  "not(" + to_node_smt(exp.value) + ")"
+    
+    elif isinstance(exp, Implies):
+        return "(" + to_node_smt(exp.left) + " -> " +to_node_smt(exp.right) +")"
+    
+    elif isinstance(exp, ITE):
+        return  "if " + to_node_smt(exp.condition) + \
+                " then " + to_node_smt(exp.left) + \
+                " else " + to_node_smt(exp.right)                        
+    
+    elif isinstance(exp, Eq):
+        return "(" + to_node_smt(exp.left) + " = " +to_node_smt(exp.right) +")"
+
+    elif isinstance(exp, Neq):
+        return "(" + to_node_smt(exp.left) + " != " +to_node_smt(exp.right) +")"
+
+    elif isinstance(exp, InRange):
+        if isinstance(InRange.abitype, AbiIntType):
+            ran = "int" + str(InRange.abitype.size)
+        elif isinstance(InRange.abitype, AbiUIntType):
+            ran = "uint" + str(InRange.abitype.size)
+        elif isinstance(InRange.abitype, AbiAddressType):
+            ran = "uint256"
+        else:
+            assert False
+        return to_node_smt(exp.expr) + " inrange " + ran
+    
+    elif isinstance(exp, Lt):
+        return "(" + to_node_smt(exp.left) + " < " +to_node_smt(exp.right) +")"
+
+    elif isinstance(exp, Le):
+        return "(" + to_node_smt(exp.left) + " <= " +to_node_smt(exp.right) +")"
+    
+    elif isinstance(exp, Gt):
+        return "(" + to_node_smt(exp.left) + " > " +to_node_smt(exp.right) +")"
+    
+    elif isinstance(exp, Ge):
+        return "(" + to_node_smt(exp.left) + " >= " +to_node_smt(exp.right) +")"
+
+    # integer expressions:
+ 
+    elif isinstance(exp, Add):
+        return "(" + to_node_smt(exp.left) + " + " +to_node_smt(exp.right) +")"
+    
+    elif isinstance(exp, Sub):
+        return "(" + to_node_smt(exp.left) + " - " +to_node_smt(exp.right) +")"
+    
+    elif isinstance(exp, Mul):
+        return "(" + to_node_smt(exp.left) + " * " +to_node_smt(exp.right) +")"
+    
+    elif isinstance(exp, Div):
+        return "(" + to_node_smt(exp.left) + " / " +to_node_smt(exp.right) +")"
+
+    
+    elif isinstance(exp, Pow):
+        return "(" + to_node_smt(exp.left) + " ** " +to_node_smt(exp.right) +")"
+
+    else:
+        assert False 
+
+def storageloc2node(loc: StorageLoc, time: Timing) -> str:
+
+
+        if time == Pre():
+            pref = "pre("
+        else:
+            pref = "post("
+
+        if isinstance(loc, VarLoc):
+            return pref + loc.contract + "." + loc.name + ")"
+        
+        elif isinstance(loc, MappingLoc):
+            smt_args = []
+            for elem in loc.args:
+                smt_args.append(to_node_smt(elem))
+            func = storageloc2node(loc.loc, time)
+            return pref + func + ")(" + ", ".join(smt_args) + ")" 
+        
+        else:
+            assert isinstance(loc, ContractLoc)
+            collect_list_of_keys = [loc.field]
+            while not isinstance(loc.loc, VarLoc):
+                loc = loc.loc
+                if isinstance(loc, ContractLoc):
+                    collect_list_of_keys = [loc.field] + collect_list_of_keys
+                else:
+                    assert False
+            print("banana")
+            collect_list_of_keys = [loc.loc.contract, loc.loc.name] + collect_list_of_keys
+
+            return pref+ ", ".join(collect_list_of_keys) + ")"
 

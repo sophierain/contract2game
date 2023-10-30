@@ -108,7 +108,7 @@ def parse_contract(contract: Dict) -> Contract:
 def parse_constructor(ctor: Dict)-> Constructor:
     
     assert ctor["kind"]=="Constructor", "'kind' key does not match 'Constructor'"
-    assert "initial_storage" in ctor, "Missing 'initial_storage' key"
+    assert "initialStorage" in ctor, "Missing 'initialStorage' key"
     assert "interface" in ctor, "Missing 'interface' key"
     assert "invariants" in ctor, "Missing 'invariants' key"
     assert "preConditions" in ctor, "Missing 'preConditions' key"
@@ -116,7 +116,7 @@ def parse_constructor(ctor: Dict)-> Constructor:
 
     return Constructor(
                         parse_interface(ctor["interface"]),
-                        [parse_initstore(elem) for elem in ctor["initial_storage"] ], 
+                        [parse_initstore(elem) for elem in ctor["initialStorage"] ], 
                         [parse_boolexp(elem) for elem in ctor["preConditions"] ],
                         [parse_boolexp(elem) for elem in ctor["postConditions"] ],
                         [exp  for elem in ctor["invariants"] for exp in parse_invariants(elem)] 
@@ -133,6 +133,16 @@ def parse_behavior(behv: Dict) -> Behavior:
     assert "returns" in behv, "Missing 'returns' key"
     assert "stateUpdates" in behv, "Missing 'stateUpdates' key"
 
+    update = []
+
+    for elem in behv["stateUpdates"]:
+        if "rewrite" in elem:
+            update.append(parse_stateupdate(elem["rewrite"]))
+        elif "location" in elem:
+            update.append(parse_stateupdate(elem))
+        else:
+            assert "constant" in elem
+
     return Behavior(
                     behv["name"],
                     parse_interface(behv["interface"]),
@@ -140,7 +150,7 @@ def parse_behavior(behv: Dict) -> Behavior:
                     [parse_boolexp(elem) for elem in behv["preConditions"] ],
                     [parse_boolexp(elem) for elem in behv["postConditions"] ],
                     parse_exp(behv["returns"]),
-                    [parse_stateupdate(elem) for elem in behv["stateUpdates"] ]
+                    update
                     )
 
 
@@ -215,7 +225,7 @@ def parse_exp(exp: Dict) -> Exp:
                 assert False, "unsupported variable type"
     
         elif "envValue" in keys:
-            # environment value; either int or bool
+            # environment value; int, bool or bytestring
             assert "type" in keys, "Missing 'type' key" 
             if exp["type"] == "int":
                 return EnvVar(exp["envValue"], ActInt())
@@ -253,6 +263,7 @@ def parse_exp(exp: Dict) -> Exp:
                 assert False, "unsupported 'timing' value: " + exp["timing"] 
 
         elif "expression" in keys: 
+            assert isinstance(exp["expression"], Dict), "expression expected to be a dictionary"
             return parse_exp(exp["expression"])
         else:
             assert False, "unknown expression:" + str(exp)
