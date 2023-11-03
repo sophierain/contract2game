@@ -1,6 +1,22 @@
 # contract2game
 
-project to automate the modeling of a smart contract as a game
+This tool uses the checkmate tool to verify game theoretic properties over an act specification.
+
+Users must provide:
+
+- an act specification
+- a set of players
+- a utility function
+- a set of "honest" plays
+
+The tool will then attempt to verify two properties:
+
+1. All players following the "honest" path will never lose money if another player deviates
+2. It is not possible for a subset of players to collectively profit by deviating
+
+## Internals
+
+An act specification is an abstract description of an evm program as a state transition system.
 
 ## State Tree -> Game Tree
 
@@ -61,6 +77,7 @@ contract C {
 
 ```
 
+
 ## Game Tree
 
 A game is an EFG. Each leaf in the game tree has a ulilty. Each inner node has a player, and edges
@@ -74,6 +91,7 @@ Properties of a good game tree:
 2. we have an edge in the tree for all possible actions (we applied all possible actions at every node, so we should have all possible edges)
 3. the tree encodes all possible turn orders
 4. every edge in the game tree must be executable (i.e. all conditions at each node must be always true, or depend on values under the control of the player)
+5. each node in the tree has > 1 choice
 
 ## Building the Tree
 
@@ -171,3 +189,162 @@ to ensure that all available actions are always possible for the current player,
 1. collected as the preconditions, if they occurring varibales appear in the utilities. That requires the constraint to only contain utility variables and constants
 
 2. collected as assumptions of the model as text, for all other constraints. E.g. the balance of each player is high-enough. If interesing, another game model with different assumptions could be generated as well.
+
+```
+         ┌───┐   0.x = 0
+         │ 0 │   0.c = false
+         └─┬─┘   0.d = false
+           │     0.v = 0
+           │
+       f(a)│
+           │
+           │
+         ┌─▼─┐  1.x = f.a
+         │ 1 │  0.c = false
+         └─┬─┘  1.c = true
+           │    1.d = 0.d
+           │    1.v = 0.v
+           │
+       g() │
+           ▼
+         ┌───┐  1.x = g.msg.sender
+         │ 2 │  1.c = true
+         └───┘  1.d = false
+                2.d = true
+                2.v = 100
+                2.c = 1.c
+                2.x = 1.x
+```
+
+### Constraint Kinds
+
+preconditions:
+
+- 1.c = true --> non dependant precondition (previous state with literals only)
+- 1.x = g.msg.sender --> dependant precondition (previous state with local var)
+
+updates:
+
+- 2.d = true --> pure constant assignment (post state with literals only)
+- 1.x = f.a --> pure variable assignment (post state with local var)
+- 2.c = 1.c --> no change (equality between the same var in the pre and post)
+
+state variable invariant:
+
+States are collections of constraints. Applying a behaviour to a state produces a new state with new constraints.
+Each storage variable of a given state (e.g. all 2.* in state 2) occurs only once in a single constraint in the constraints associated with that state.
+This constraint has an update kind (i.e. pca, pva, nc).
+TODO: this might need moditication if we start to consider ensures / invariants)
+
+### Case Splitting and Dependant Preconditions
+
+Terminology:
+
+- dependant behaviour: a beahviour that contains a dependant precondition.
+- upstream behaviour: the behaviour that can control the storage variables referenced in the dependant precondition of the dependant behaviour
+
+If we have dependant preconditions in our constraint system, then the caller of the upstream
+behaviour will be able to influence whether or not the dependant behaviour succeeds. In order to
+represent this in the game tree, we will need to split the upstream behaviour accordingly.
+
+we need to split the upstream behaviour into the case where the depdendant precondition is sat and the one where it is not.
+
+TODO: we need to think about what happens with multiple dp, and dp involving msg.sender, also for
+non neighbor upstream/dependant pairs, also dependant preconditions that have multiple upstream
+behaviours.
+
+
+we are looking for constraints on the local variables of the upstream that will make the dependant pc always true (or false?).
+we can find the variables that will be in these constraints by walking back up the dependency graph.
+e.g. we have 1.x = g.msg.sender, we look for the update involving 1.x in the constraints of f, we 1.x = f.a, since f.a is local to f, we're done.
+
+now we have two cases to consider:
+
+1. the upstream variable is under the control of the caller of the upstream behaviour (e.g. function args). We now split the upstream behaviour into two cases:
+   1. the upstream is called in a way that makes the dp true -> e.g. add 1.x = g.msg.sender to the constraint system
+   2. the upstream is called in a way that makes the dp false -> e.g. add 1.x /= g.msg.sender
+
+2. the upstream variable is not under the control of the caller (e.g. block.coinbase, other env vars). These conditions will be made preconditions of the model.
+
+
+
+```
+# constructor
+0.x = 0      # pca
+0.c = false  # pca
+0.d = false  # pca
+0.v = 0      # pca
+
+# f
+0.c = false  # ndp
+1.x = f.a    # pva
+1.c = true   # pca
+1.d = 0.d    # nc
+1.v = 0.v    # nc
+
+# g
+1.c = true   # ndp
+1.d = false  # ndp
+1.x = g.msg.sender # dp
+2.d = true   # pca
+2.v = 100    # pca
+2.c = 1.c    # nc
+2.x = 1.x    # nc
+```
+
+- defined the players
+- picked a starting player
+
+1. start at the root, for each behaviour:
+  - apply the beahviour, and set msg.sender to be the starting player
+  - discard any new states that are always unsat
+
+2. for each new state:
+  - for each player:
+    - for each behaviour:
+      - apply the behaviour, and set msg.sender to be the starting player
+      - check the new state for dependant preconditions
+      - if they exist, apply split the upstream behaviour if needed
+      - discard any new states that are always unsat
+
+keep running 2. until the only behaviour that can be applied is ignore.
+
+3. It may be that the case splitting in 2. produces overlapping cases (e.g. call f with a == A, call f with a /= A, call f with a == B, call f with a /= B). For each pair of constraints We consider the following cases:
+     1. no overlap. the conjunction of the cases is unsat (e.g. a == A, a == B)
+     2. overlap. we ask the smt solver if the second constraint is implied by the first.
+       1. they do: (e.g. a == B, a /= A) -> ???
+       2. they do not: (e.g. a /= A, a /= B) -> ???
+
+3. apply the utility function to every leaf node
+
+4. we have a game tree! :)
+
+```
+                        ┌───┐
+                        │ A ├───────────────────────┬──────────────────────────────┬───────────────────┐
+                        └─┬─┘                       │                              │                   │
+                          │                         │                              │                   │
+                          │                         │                              │                   │ ignore
+                      f(A)│                     f(B)│                          f(a)│                   │
+                          │                         │                          a/={A,B}                │
+                          │                         │                              │                   │
+          ignore        ┌─▼─┐                     ┌─▼─┐  ignore                  ┌─▼─┐               ┌─▼─┐
+        ┌───────────────┤ A │                     │ B ├────────┐                 │   │               │ B ├───────────────────────┬──────────────────────────────┬──────────────────────────┐
+        │               └─┬─┘                     └─┬─┘        │                 └───┘               └─┬─┘                       │                              │                          │
+        │                 │                         │          │                                       │                         │                              │                          │
+        │                 │                         │          │                                       │                         │                              │                          │
+        │                 │                         │          │                                   f(A)│                     f(B)│                          f(a)│                          │ ignore
+        │             g() │                     g() │          │                                       │                         │                          a/={A,B}                       │
+        ▼                 ▼                         ▼          ▼                                       │                         │                              │                          │
+      ┌───┐             ┌───┐                     ┌───┐      ┌───┐                         ignore    ┌─▼─┐                     ┌─▼─┐  ignore                  ┌─▼─┐                      ┌─▼─┐
+      │   │             │   │                     │   │      │   │                       ┌───────────┤ A │                     │ B │ ───────┐                 │   │                      │   │
+      └───┘             └───┘                     └───┘      └───┘                       │           └─┬─┘                     └─┬─┘        │                 └───┘                      └───┘
+                                                                                         │             │                         │          │
+                                                                                         │             │                         │          │
+                                                                                         │             │                         │          │
+                                                                                         │         g() │                     g() │          │
+                                                                                         ▼             ▼                         │          ▼
+                                                                                       ┌───┐         ┌───┐                     ┌─┴─┐      ┌───┐
+                                                                                       │   │         │   │                     │   │      │   │
+                                                                                       └───┘         └───┘                     └───┘      └───┘
+```
