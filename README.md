@@ -143,4 +143,31 @@ In order to move from a state tree to a game tree we need to discover all possib
 ### adding ignore nodes
 
 it is always a valid play to do nothing.
+
 - payoffs for internal nodes
+
+### add subtrees after ignore nodes
+
+maybe repeat
+
+### add sibling nodes with "negated preconditions"
+
+in the above example can B behave in such a way that A cannot call g? (that is not related to msg.senders). Could be a specific value that is set in f and required in g
+
+e.g. in closing: did A propose an honest split or a dishonest one? B can only call 'revoke' if it was dishonest
+
+### compute utilities at each leaf
+
+according to what user provided as input.
+Some rules for that:
+
+- utility has to depend only on history of called functions and storage values (?)
+- new variables are allowed to be introduced as infinitesimals only
+
+### deal with remaining constraints
+
+to ensure that all available actions are always possible for the current player, the remaining constraints in the states will be first broken into CNF (conjunctive normal form) and then
+
+1. collected as the preconditions, if they occurring varibales appear in the utilities. That requires the constraint to only contain utility variables and constants
+
+2. collected as assumptions of the model as text, for all other constraints. E.g. the balance of each player is high-enough. If interesing, another game model with different assumptions could be generated as well.
