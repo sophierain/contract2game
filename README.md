@@ -312,8 +312,27 @@ keep running 2. until the only behaviour that can be applied is ignore.
 3. It may be that the case splitting in 2. produces overlapping cases (e.g. call f with a == A, call f with a /= A, call f with a == B, call f with a /= B). For each pair of constraints We consider the following cases:
      1. no overlap. the conjunction of the cases is unsat (e.g. a == A, a == B)
      2. overlap. we ask the smt solver if the second constraint is implied by the first.
-       1. they do: (e.g. a == B, a /= A) -> ???
-       2. they do not: (e.g. a /= A, a /= B) -> ???
+       1. they do: (e.g. a == B, a /= A):
+          1. the first is also implied by the second: they are the same, so we can drop one.
+          2. the first is not implied by the second: add the negation of the first to the second. new pair is: (a == B, a /= A && a /= B)
+       2. they do not: (e.g. a /= A, a /= B):
+          1. the first is not implied by the second: skip and hope it gets rewritten in the future
+          2. the first is implied by the second: add the negation of the second to the first
+
+overlaps occur when one case implies another:
+while this is true, rewrite the implied one to exclude the implicator
+(a == A, a /= A) -> do nothing
+(a == A, a == B) -> do nothing
+(a == A, a /= B) -> rewrite all a /= B to a /= A && a /= B
+(a /= A, a == B) -> rewrite all a /= A to a /= B && a /= A
+(a /= A && a /= B, a /= B && a /= A) -> rewrite all a /= B && a /= A to a /= A && a /= B
+(a == B, a /= B && a /= A) -> do nothing
+
+final unique constraint set is:
+
+a == A
+a == B
+a /= A && a /= B
 
 3. apply the utility function to every leaf node
 
