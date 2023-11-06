@@ -99,27 +99,26 @@ There are a few difficulties in moving from an act specification to a game tree:
    root of the tree. Act specifications can have local variables and behaviour local constraints. We
    must therefore lift all constraints to the root of the tree and apply variable renaming to mimic
    this local variable and constraint scoping.
+6. The game tree is defined over the reals, and the act specification is defined over ints. This is
+   mostly a safe over abstraction (see section for arguments), but is unsound for expressions
+   involving division.
 
 In order to construct the game tree we need the following steps:
 
-- construct state tree
-    - build a tree that represents all possible sequential applications of behaviours on top of the
-        construtor post state
 - player concretization & ignore nodes
-    - assign a player to each node
-    - add ignore edges to every node
-    - produces a "player enhanced state tree" (pest)
-- "normal" case splitting (pull out internal nodes)
+  - assign a player to each node
+  - add ignore edges to every node
+  - produces a state tree
+- case splitting
+  - constraint classification
+  - caller dependent case splits
+  - history dependent case splits
     - ensures that every action is always executable by the player
-- case consistency transformations
+  - case consistency transformations
     - rewrite case conditions to ensure that they are both exhaustive and non overlapping
 - apply utilities
-    - apply payoff function to produce utilites at each leaf node
+  - apply payoff function to produce utilites at each leaf node
 - lift constraints & variable renaming
-
-#### State Tree Construction
-
-start at the root, recursivly apply all behaviours to all nodes until either nothing more can be sat, or we hit some max depth
 
 #### Player Concretization and Ignore Nodes
 
@@ -132,15 +131,17 @@ start at the root, recursivly apply all behaviours to all nodes until either not
 
 2. for each new state:
     - for each player:
-        - for each behaviour:
+        - for each behaviour (including ignore):
             - apply the behaviour, and set msg.sender to be the current player
-            - check the new state for dependant preconditions
-            - if they exist, split the upstream behaviour if needed
             - discard any new states that are always unsat
 
-keep running 2. until the only behaviour that can be applied is ignore.
+keep running 2. until any of the following stop conditions is true:
 
-##### Case Splitting and Player Dependant Preconditions
+- the only behaviour that can be applied is ignore
+- the history contains only ignore edges, and every player has played ignore once
+- a max history length has been reached
+
+#### Caller Dependent Case Splits
 
 Terminology:
 
@@ -157,10 +158,9 @@ TODO: we need to think about what happens with multiple dp, and dp involving msg
 non neighbor upstream/dependant pairs, also dependant preconditions that have multiple upstream
 behaviours.
 
-
 we are looking for constraints on the local variables of the upstream that will make the dependant pc always true (or false?).
 we can find the variables that will be in these constraints by walking back up the dependency graph.
-e.g. we have 1.x = g.msg.sender, we look for the update involving 1.x in the constraints of f, we 1.x = f.a, since f.a is local to f, we're done.
+e.g. we have 1.x = g.msg.sender, we look for the update involving 1.x in the constraints of f, e.g. 1.x = f.a, since f.a is local to f, we're done.
 
 now we have two cases to consider:
 
@@ -169,6 +169,8 @@ now we have two cases to consider:
    2. the upstream is called in a way that makes the dp false -> e.g. add 1.x /= g.msg.sender
 
 2. the upstream variable is not under the control of the caller (e.g. block.coinbase, other env vars). These conditions will be made preconditions of the model.
+
+#### History Dependant Case Splits
 
 #### Case Consistency Transformations
 
@@ -181,6 +183,12 @@ now we have two cases to consider:
        2. they do not: (e.g. a /= A, a /= B):
           1. the first is not implied by the second: skip and hope it gets rewritten in the future
           2. the first is implied by the second: add the negation of the second to the first
+
+### Safety of Integer -> Real Conversion
+
+We think that this is a sound over abstraction for all arithmetic ops except division.
+
+TODO: document our reasoning.
 
 ## State Tree -> Game Tree
 
