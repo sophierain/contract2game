@@ -101,6 +101,9 @@ keep running 2. until any of the following stop conditions is true:
 - the history contains only ignore edges, and every player has played ignore once
 - a max history length has been reached
 
+3. find sibling nodes that have no children and identical histories (i.e. leaves), delete all but
+   one, and remove the player.
+
 ### Case Splitting
 
 #### Constraint Classification
