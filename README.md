@@ -25,11 +25,10 @@ the pre/post state, environment variables and calldata arguments.
 
 ### Game Tree
 
-A game tree represents an Extensive Form Game (EFG). Each leaf in the game tree has a ulilty. Each
+A game tree represents an Extensive Form Game (EFG). Each leaf in the game tree has a utility. Each
 inner node has a player, and edges representing possible actions for that player in this stage of
-the game. It can have global preconditions over variables in the utlities. Variables in the utlities
-have a global scope. Preconditions cannot speak about environment variables cannot speak about
-players or actions.
+the game. It can have global preconditions over variables in the utilities. Variables in the utilities
+have a global scope. Preconditions cannot speak about players or actions.
 
 Properties of a good game tree:
 
@@ -39,48 +38,9 @@ Properties of a good game tree:
 4. every edge in the game tree must be executable (i.e. all conditions at each node must be always true, or depend on values under the control of the player)
 5. each node in the tree has > 1 choice
 
-### Constraint Kinds
 
-Game tree construction requires different steps depending on the "kind" of constraints that are
-present at a given state. We need to find constraints that involve variables that are under the
-control of players from previous steps (dependent precondtions), within this subset of constriants,
-there are two kinds of constriant that we are interested in:
 
-1. Constraints involving msg.sender (caller dependent preconditions)
-2. Constraints involving state variables that can be influenced by a previous call (history dependent preconditions)
-
-We therefore need two classifiers:
-
-#### General Dependency Classifier
-
-This classifier uses the smt solver to tell us if a given constraint can always be made true by
-setting player controlled variables only. For each constraint we construct the following formula and
-check it's satisifiability in z3:
-
-```
-exists (iface vars + msg.value) . forall (others) . constraint
-```
-
-This will return sat iff the truth value of the constraint depends only on player controlled
-variables.
-
-#### Caller Dependency
-
-All dependent constraints require some case splitting, but the exact form depends on whether the
-constraint talks about msg.sender. We implement a very simple fully static classifier that first
-checks if msg.sender is present in the constraint at all. If it is not, then it is a history
-dependent precondition, if it is then it is potentially caller dependent.
-
-We then analyze the potentially caller depedent constraints. This stage is currently extremely
-simple and simply rejects constraints that are not disjunctions of simple equalities between
-msg.sender and a single term (either a literal or a variable).
-
-We need this because the dependent constraint may be dependent on many variables, and we don't know
-how to split constraints depend on msg.sender and other variables (and these constraints are anyway
-rather esoteric and unlikely to occur in normal code). We therefore support only this very simple
-form of msg.sender constraint, and expect that to be enough for most real world code.
-
-### Building the Game Tree
+### Building the Game Tree - Overview
 
 There are a few difficulties in moving from an act specification to a game tree:
 
@@ -105,7 +65,7 @@ There are a few difficulties in moving from an act specification to a game tree:
 
 In order to construct the game tree we need the following steps:
 
-- player concretization & ignore nodes
+- build (player enhanced) state tree (with ignore)
   - assign a player to each node
   - add ignore edges to every node
   - produces a state tree
@@ -120,7 +80,7 @@ In order to construct the game tree we need the following steps:
   - apply payoff function to produce utilites at each leaf node
 - lift constraints & variable renaming
 
-#### Player Concretization and Ignore Nodes
+### build (player enhanced) state tree (with ignore)
 
 - defined the players
 - picked a starting player
@@ -140,6 +100,50 @@ keep running 2. until any of the following stop conditions is true:
 - the only behaviour that can be applied is ignore
 - the history contains only ignore edges, and every player has played ignore once
 - a max history length has been reached
+
+### Case Splitting
+
+#### Constraint Classification
+
+Game tree construction requires different steps depending on the "kind" of constraints that are
+present at a given state. We need to find constraints that involve variables that are under the
+control of players from previous steps (dependent precondtions), within this subset of constriants,
+there are two kinds of constriant that we are interested in:
+
+1. Constraints involving msg.sender (caller dependent preconditions)
+2. Constraints involving state variables that can be influenced by a previous call (history dependent preconditions)
+
+We therefore need two classifiers:
+
+##### General Dependency Classifier
+
+This classifier uses the smt solver to tell us if a given constraint can always be made true by
+setting player controlled variables only. For each constraint we construct the following formula and
+check it's satisifiability in z3:
+
+```
+exists (iface vars + msg.value) . forall (others) . constraint
+```
+
+This will return sat iff the truth value of the constraint depends only on player controlled
+variables.
+
+##### Caller Dependency
+
+All dependent constraints require some case splitting, but the exact form depends on whether the
+constraint talks about msg.sender. We implement a very simple fully static classifier that first
+checks if msg.sender is present in the constraint at all. If it is not, then it is a history
+dependent precondition, if it is then it is potentially caller dependent.
+
+We then analyze the potentially caller depedent constraints. This stage is currently extremely
+simple and simply rejects constraints that are not disjunctions of simple (in-)equalities between
+msg.sender and a single term (either a literal or a variable).
+
+We need this because the dependent constraint may be dependent on many variables, and we don't know
+how to split constraints depend on msg.sender and other variables (and these constraints are anyway
+rather esoteric and unlikely to occur in normal code). We therefore support only this very simple
+form of msg.sender constraint, and expect that to be enough for most real world code.
+
 
 #### Caller Dependent Case Splits
 
@@ -169,6 +173,23 @@ now we have two cases to consider:
    2. the upstream is called in a way that makes the dp false -> e.g. add 1.x /= g.msg.sender
 
 2. the upstream variable is not under the control of the caller (e.g. block.coinbase, other env vars). These conditions will be made preconditions of the model.
+
+
+##### identifying the upstream behaviour
+
+once we know all the dependent constraints (both caller and history) from the classifier, we focus first on the caller dependent constraints:
+
+we know the constraint has the following shape: history.storage_var = (!=) behv.msg.sender or history.other_stor_var = (!=) behv.msg.sender or...
+hence we collect all the LHS that occur.
+
+if LHS is a storage_var keep the storage var
+if LHS is a function evaluation stor_fun(var) where stor_fun is a function in the storage and var any type of variable or numeric value keep both
+
+In the state storage tracker (TO CONSIDER IN THE WRITE-UP) we look up all the mentioned entires and which previous behaviours accesses them (only the relevant ones --> if new sth assigned all prev dependencies removed)
+
+split on the upstream behv s.t. the dependent behv is sat in one branch and usat in the other
+
+
 
 #### History Dependant Case Splits
 
