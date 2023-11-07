@@ -152,14 +152,14 @@ form of msg.sender constraint, and expect that to be enough for most real world 
 
 Terminology:
 
-- dependant behaviour: a beahviour that contains a player dependant precondition (pdp).
-- upstream behaviour: the behaviour that can control the storage variables referenced in the pdp of the dependant behaviour
+- dependant behaviour: a beahviour that contains a caller dependent precondition (cdp).
+- upstream behaviour: the behaviour that can control the storage variables referenced in the cdp of the dependant behaviour
 
-If we have pdps in our constraint system, then the caller of the upstream behaviour will be able to
+If we have cdps in our constraint system, then the caller of the upstream behaviour will be able to
 influence whether or not the dependant behaviour succeeds. In order to represent this in the game
 tree, we will need to split the upstream behaviour accordingly.
 
-we need to split the upstream behaviour into the case where the pdp is sat and the one where it is not.
+we need to split the upstream behaviour into the case where the cdp is sat and the one where it is not.
 
 TODO: we need to think about what happens with multiple dp, and dp involving msg.sender, also for
 non neighbor upstream/dependant pairs, also dependant preconditions that have multiple upstream
