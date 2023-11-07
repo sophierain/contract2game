@@ -188,13 +188,39 @@ hence we collect all the LHS that occur.
 if LHS is a storage_var keep the storage var
 if LHS is a function evaluation stor_fun(var) where stor_fun is a function in the storage and var any type of variable or numeric value keep both
 
-In the state storage tracker (TO CONSIDER IN THE WRITE-UP) we look up all the mentioned entires and which previous behaviours accesses them (only the relevant ones --> if new sth assigned all prev dependencies removed)
+1. In the state storage tracker (TO CONSIDER IN THE WRITE-UP) we look up all the mentioned entries and which previous behaviours accesses them (only the relevant ones --> if new sth assigned all prev dependencies removed), rewrite constraint accordingly
 
-split on the upstream behv s.t. the dependent behv is sat in one branch and usat in the other
+2. replace behv.msg.sender with the player from the history
 
+3. split on the upstream behv s.t. the dependent constraint is true in one branch and false in the other
+
+4. add the new constraint to the resp. state and check satisfiability. If unsat -> remove branch and go to step 6, if sat to step 5
+
+5. remove now impossible behv from "false" branch; convert to leaf node if only remaining behv is ignore
+
+6. move to next caller dep. constraint
 
 
 #### History Dependant Case Splits
+
+for the history dependent constraints, we also look at them one afer the other
+
+
+Step 1: existentially quantify all interface vars of the current behav in the constraint
+
+Step 2: for each upstream behav, existentially quantify "future dependencies" and  split in each upstream behav, (maybe top-down):
+
+  1. rewrite constraint acc. to state tracker
+
+  2. split on the upstream behv s.t. the dependent constraint is true in one branch and false in the other
+
+  3. add the new constraint to the resp. state and check satisfiability. If unsat -> remove branch and go to step 5, if sat to step 4
+
+  4. remove now impossible behv from "false" branch; convert to leaf node if only remaining behv is ignore
+
+  5. move to next caller dep. constraint
+
+
 
 #### Case Consistency Transformations
 
