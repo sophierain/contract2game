@@ -712,13 +712,11 @@ def to_node_smt(exp: Exp)-> str:
         return to_node_smt(exp.expr) + " inrange " + ran
     
     elif isinstance(exp, Lt):
-        return "(" + to_node_smt(exp.left) + " < " +to_node_smt(exp.right) +")"
+        return "(" + to_node_smt(exp.left) + " < " + to_node_smt(exp.right) +")"
 
     elif isinstance(exp, Le):
-        return "(" + to_node_smt(exp.left) + " <= " +to_node_smt(exp.right) +")"
-    
-    elif isinstance(exp, Gt):
-        return "(" + to_node_smt(exp.left) + " > " +to_node_smt(exp.right) +")"
+        return "(" + to_node_smt(exp.left) + " <= " + to_node_smt(exp.right) +")"
+
     
     elif isinstance(exp, Ge):
         return "(" + to_node_smt(exp.left) + " >= " +to_node_smt(exp.right) +")"
@@ -771,7 +769,6 @@ def storageloc2node(loc: StorageLoc, time: Timing) -> str:
                     collect_list_of_keys = [loc.field] + collect_list_of_keys
                 else:
                     assert False
-            print("banana")
             collect_list_of_keys = [loc.loc.contract, loc.loc.name] + collect_list_of_keys
 
             return pref+ ", ".join(collect_list_of_keys) + ")"

@@ -61,11 +61,11 @@ contract C {
        f(a)│
            │
            │
-         ┌─▼─┐  1.x = f.a
-         │ 1 │  0.c = false
+         ┌─▼─┐  0.c = false
+         │ 1 │  1.x = f.a
          └─┬─┘  1.c = true
-           │
-           │
+           │    1.d = 0.d
+           │    1.v = 0.v
            │
        g() │
            ▼
@@ -74,16 +74,18 @@ contract C {
          └───┘  1.d = false
                 2.d = true
                 2.v = 100
+                2.x = 1.x
+                2.c = 1.c
 
 ```
 
 
 ## Game Tree
 
-A game is an EFG. Each leaf in the game tree has a ulilty. Each inner node has a player, and edges
+A game is an EFG. Each leaf in the game tree has a utility. Each inner node has a player, and edges
 representing possible actions for that player in this stage of the game. It can have global
 preconditions over variables in the utlities. Variables in the utlities have a global scope.
-Preconditions cannot speak about environment variables cannot speak about players or actions.
+Preconditions cannot speak about environment variables nor about players or actions.
 
 Properties of a good game tree:
 
@@ -91,7 +93,7 @@ Properties of a good game tree:
 2. we have an edge in the tree for all possible actions (we applied all possible actions at every node, so we should have all possible edges)
 3. the tree encodes all possible turn orders
 4. every edge in the game tree must be executable (i.e. all conditions at each node must be always true, or depend on values under the control of the player)
-5. each node in the tree has > 1 choice
+5. each node in the tree has > 1 choice or be a leaf node
 
 ## Building the Tree
 
@@ -162,7 +164,7 @@ In order to move from a state tree to a game tree we need to discover all possib
 
 it is always a valid play to do nothing.
 
-- payoffs for internal nodes
+- state remains unchanged
 
 ### add subtrees after ignore nodes
 
@@ -179,14 +181,14 @@ e.g. in closing: did A propose an honest split or a dishonest one? B can only ca
 according to what user provided as input.
 Some rules for that:
 
-- utility has to depend only on history of called functions and storage values (?)
+- utility has to depend only on history of called functions and storage values (keep track of those in an additional data structure?)
 - new variables are allowed to be introduced as infinitesimals only
 
 ### deal with remaining constraints
 
 to ensure that all available actions are always possible for the current player, the remaining constraints in the states will be first broken into CNF (conjunctive normal form) and then
 
-1. collected as the preconditions, if they occurring varibales appear in the utilities. That requires the constraint to only contain utility variables and constants
+1. collected as the preconditions, if the occurring variables appear in the utilities. That requires the constraint to only contain utility variables and constants
 
 2. collected as assumptions of the model as text, for all other constraints. E.g. the balance of each player is high-enough. If interesing, another game model with different assumptions could be generated as well.
 
@@ -232,18 +234,15 @@ updates:
 state variable invariant:
 
 States are collections of constraints. Applying a behaviour to a state produces a new state with new constraints.
-Each storage variable of a given state (e.g. all 2.* in state 2) occurs only once in a single constraint in the constraints associated with that state.
+Each storage variable of a given state (e.g. all 2.* in state 2) occurs only once (on the LHS) in a single constraint in the constraints associated with that state.
 This constraint has an update kind (i.e. pca, pva, nc).
-TODO: this might need moditication if we start to consider ensures / invariants)
+TODO: this might need modification if we start to consider ensures / invariants)
 
 ### Case Splitting and Dependant Preconditions
 
 Terminology:
 
-- dependant behaviour: a beahviour that contains a dependant precondition.
-- upstream behaviour: the behaviour that can control the storage variables referenced in the dependant precondition of the dependant behaviour
-
-If we have dependant preconditions in our constraint system, then the caller of the upstream
+- dependant behaviour: a beahviour that contains a dependant precondition.```
 behaviour will be able to influence whether or not the dependant behaviour succeeds. In order to
 represent this in the game tree, we will need to split the upstream behaviour accordingly.
 
@@ -261,13 +260,7 @@ e.g. we have 1.x = g.msg.sender, we look for the update involving 1.x in the con
 now we have two cases to consider:
 
 1. the upstream variable is under the control of the caller of the upstream behaviour (e.g. function args). We now split the upstream behaviour into two cases:
-   1. the upstream is called in a way that makes the dp true -> e.g. add 1.x = g.msg.sender to the constraint system
-   2. the upstream is called in a way that makes the dp false -> e.g. add 1.x /= g.msg.sender
-
-2. the upstream variable is not under the control of the caller (e.g. block.coinbase, other env vars). These conditions will be made preconditions of the model.
-
-
-
+   1. the upstream is called in a way that makes the dp true -> e.g. add 1.x = g.msg.sender to the constraint system```
 ```
 # constructor
 0.x = 0      # pca
@@ -315,9 +308,7 @@ keep running 2. until the only behaviour that can be applied is ignore.
        1. they do: (e.g. a == B, a /= A):
           1. the first is also implied by the second: they are the same, so we can drop one.
           2. the first is not implied by the second: add the negation of the first to the second. new pair is: (a == B, a /= A && a /= B)
-       2. they do not: (e.g. a /= A, a /= B):
-          1. the first is not implied by the second: skip and hope it gets rewritten in the future
-          2. the first is implied by the second: add the negation of the second to the first
+       2. they do not: (e.g. a /= A, a /= B):```
 
 overlaps occur when one case implies another:
 while this is true, rewrite the implied one to exclude the implicator
