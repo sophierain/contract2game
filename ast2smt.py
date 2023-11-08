@@ -15,8 +15,7 @@ SymVar = Union[Integer, Boolean, String, z3.FuncDeclRef]
 #is_string, is_int, is_bool are the type check calls
 
 PreStore = Dict[str, Union[SymVar, 'PreStore']]
-SymStore = Dict[str, PreStore]
-
+SymStore = Dict[str, PreStore]       
 """
 x = z3.Int(<name>): z3.ArithRef                                         integer constant named <name>
 z = z3.Bool(<name>): z3.BoolRef   
@@ -24,34 +23,45 @@ s = z3.String(<name>): z3.SeqRef                                                
 y = z3.Function(<fct_name>, <z3 input sort(s)>, <z3 ouput sort>): z3.FuncDeclRef   uninterpreted function named <fct_name>
 """
 
-@dataclass
-class SymState:
-    storage: SymStore
-    constraints: List[Boolean]
+Upstream = List[str] # path through the tree as list of str
 
 @dataclass
 class Tree:
     """a node with possibly 0 children"""
-    state: SymState
+    store: SymStore
+    state_tracker: Dict[SymStore, Tuple[SymVar, List[Upstream]]]
+    beh_case: List[Boolean]
+    preconditions: List[Boolean]
+    updates: List[Boolean]
+    split_constraints: List[Boolean]
     children: Dict[str, 'Tree']
-    case: List[Boolean]
+   
 
-    def __repr__(self, level = 0) -> str:
+
+
+
+    def __repr__(self, level = 0) -> str:  # add tracker at some point...
         
         indent = "   "*level
         res = f"{indent}State: \n"
         res = res + f"{indent}   Storage:\n"
         for key, value in self.state.storage.items():
             res = res + f"      {indent}{key}: {value}\n"
-        res = res + f"{indent}   Constraints:\n"
-        for elem in self.state.constraints:
+        res = res + f"{indent}   Case:\n"
+        for elem in self.beh_case:
+            res = res + f"{indent}      {elem}\n"
+        res = res + f"{indent}   Preconditions:\n"
+        for elem in self.preconditions:
+            res = res + f"{indent}      {elem}\n"
+        res = res + f"{indent}   Updates:\n"
+        for elem in self.updates:
+            res = res + f"{indent}      {elem}\n"
+        res = res + f"{indent}   Split Constraints:\n"
+        for elem in self.split_constraints:
             res = res + f"{indent}      {elem}\n"
         res = res + f"{indent}Children:\n"
         for ckey, cvalue in self.children.items():
             res = res + f"{indent}   {ckey}:\n{cvalue.__repr__(level + 1)}\n"
-        res = res +f"{indent}Case:"
-        for elem in self.case:
-            res = res + f"\n{indent}   {elem}"
 
         return res
 
@@ -73,18 +83,18 @@ def contract2tree(contract: Contract, storage: Storage, extra_constraints: List[
     
     """
 
-    root = init_state(storage, contract.constructor, extra_constraints)
+    init_store, init_tracker, init_prec, init_updates = init_state(storage, contract.constructor, extra_constraints)
     
-    return generate_tree([], root.storage, root, [], [], contract.name, contract.constructor, contract.behaviors)
+    return generate_tree([], init_store, init_store, init_tracker, init_prec, init_updates, [], [], contract.name, contract.constructor, contract.behaviors)
 
 
-def init_state(storage: Storage, ctor: Constructor, extraConstraints: List[Exp]) -> SymState:
+def init_state(storage: Storage, ctor: Constructor, extraConstraints: List[Exp]) -> (SymStore, Dict[SymStore, Tuple[SymVar, List[Upstream]]], List[Boolean], List[Boolean]):
     """
     storage: storage dict of contract, contains all variables to be considered
     ctor: constructor of the contract, might be used later
-    extra_constraints: a list of user defined constraints to be enforced as preconditions
+    extra_constraints: a list of user defined constraints to be enforced as preconditions List[Boolean]
 
-    returns: a symstate containing translated storage information to smt concepts, 
+    returns: all ingredients to create the root of a tree containing translated storage information to smt concepts, 
              and collected initial constraints from user
     
     """
@@ -94,17 +104,27 @@ def init_state(storage: Storage, ctor: Constructor, extraConstraints: List[Exp])
         for nested_key, nested_value in value.items():
             store[key][nested_key] = slottype2smt(key, nested_key, nested_value, storage)
 
-    smt_constraints = []
-    for exp in extraConstraints:
-        smt_constraints.append(to_bool(store, store, [], exp))
+    prec = []
+    updates = []
 
-    return SymState(store, smt_constraints)
+    for exp in ctor.initial_storage:
+        updates.append(to_bool(store, store, [], exp))
+
+    for exp in extraConstraints:
+        prec.append(to_bool(store, store, [], exp))
+
+    tracker = dict() #to be implemented!!!
+
+    return store, tracker, prec, updates
 
 
 def generate_tree(
                   constraints: List[Boolean], 
                   initstore: SymStore,
-                  prestate: SymState, 
+                  store: SymStore,
+                  tracker: Dict[SymStore, Tuple[SymVar, List[Upstream]]],
+                  prec: List[Boolean],
+                  updates: List[Boolean],
                   case_cond: List[Boolean], 
                   history: List[str], 
                   contract_name: str, 
@@ -113,19 +133,23 @@ def generate_tree(
     """recursively extends the tree by applying all behaviors to all leaves until no new reachable states are found"""
 
     children_solver = z3.Solver()
-    children_solver.add(*prestate.constraints)
-    children_solver.add(*constraints)
+    to_add = constraints + prec + updates + case_cond
+
+
     children: Dict[str, Tree] = dict()
     for behv in behvs:
         child_name = behv.name + "__" + to_node_name(behv.caseConditions, initstore)
         # naive breaking condition: no 2 functions (behavior) can be called twice
         if not child_name in history:
-            child, child_case = apply_behaviour(prestate, history + [child_name], contract_name, contr, behv)
-            reachable = children_solver.check(child.constraints)
+            child_store, child_tracker, child_prec, child_updates, child_case = apply_behaviour(store, tracker, history + [child_name], contract_name, contr, behv)
+            reachable = children_solver.check(child_prec + child_updates + child_case + to_add)
             if reachable == z3.sat:
-                children[child_name] = generate_tree(constraints + prestate.constraints, 
+                children[child_name] = generate_tree(to_add, 
                                                      initstore,
-                                                    child, 
+                                                    child_store,
+                                                    child_tracker,
+                                                    child_prec,
+                                                    child_updates,
                                                     child_case,
                                                     history + [child_name],
                                                     contract_name,
@@ -135,7 +159,7 @@ def generate_tree(
                 logging.info("solver returned 'unkown'")
                 assert False
         
-    return Tree(prestate, children, case_cond)
+    return Tree(store, tracker, case_cond, prec, updates, [], children)
 
 
 def slottype2smt(contract: str, name: str, slot: SlotType, storage: Storage) -> SymVar | PreStore :
@@ -197,6 +221,8 @@ def to_bool(prestore: SymStore, poststore: SymStore, history: List[str], exp: Ex
 
 def to_int(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp) -> Integer:
     res = to_smt(prestore, poststore, history, exp)
+    # assert len(raw_res) == 1
+    # res = raw_res[0]
     assert isinstance(res, int) or isinstance(res, z3.ArithRef), "integer expression expected"
     return res
 
@@ -365,35 +391,43 @@ def to_smt(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp
         assert False 
      
 
-def apply_behaviour(state: SymState,
+def apply_behaviour(store: SymStore,
+                    tracker: Dict[SymStore, Tuple[SymVar, List[Upstream]]],
                     history: List[str], 
                     contract_name: str, 
                     contr: Constructor,
-                    behv: Behavior)         -> Tuple[SymState, List[Boolean]]:
-    """apply behavior 'behv' to the state 'state', returns a the SymState (storage state and constraints) after this execution"""
+                    behv: Behavior)         -> Tuple[SymStore, Dict[SymStore, Tuple[SymVar, List[Upstream]]], List[Boolean], List[Boolean], List[Boolean]]:
 
     new_storage = dict()
-    for key, value in state.storage.items():
+    for key, value in store.items():
         new_storage[key] = gen_poststore(value, history[-1])
     
 
-    constraints = []
+    prec = []
+    updates = []
     case_cond = []
-    for exp in behv.caseConditions:
-        case_cond.append(to_bool(state.storage, new_storage, history, exp))
-    constraints.extend(case_cond)
-    for exp in behv.preConditions:
-        constraints.append(to_bool(state.storage, new_storage, history, exp))
-    for exp in behv.postConditions:
-        constraints.append(to_bool(state.storage, new_storage, history, exp))
-    for exp in contr.invariants:
-        constraints.append(to_bool(state.storage, new_storage, history, exp))
-    for exp in behv.stateUpdates:
-        constraints.append(to_bool(state.storage, new_storage, history, exp))
-   
-    no_update_constraints = no_update(state.storage, new_storage, history, contract_name ,behv.stateUpdates)
 
-    return SymState(new_storage, constraints + no_update_constraints), case_cond
+    for exp in behv.caseConditions:
+        case_cond.append(to_bool(store, new_storage, history, exp))
+  
+    for exp in behv.preConditions:
+        prec.append(to_bool(store, new_storage, history, exp))
+
+    # ignore post cond and inv for now
+
+    # for exp in behv.postConditions:
+    #     constraints.append(to_bool(store, new_storage, history, exp))
+    # for exp in contr.invariants:
+    #     constraints.append(to_bool(store, new_storage, history, exp))
+
+    for exp in behv.stateUpdates:
+        updates.append(to_bool(store, new_storage, history, exp))
+   
+    no_update_constraints = no_update(store, new_storage, history, contract_name, behv.stateUpdates)
+
+    new_tracker = dict() # to be implemented!!! depends on tracker, updates and no_updates
+
+    return new_storage, new_tracker, prec, updates + no_update_constraints, case_cond
 
 
 def generate_smt_storageloc(
@@ -402,40 +436,39 @@ def generate_smt_storageloc(
                             history: List[str], 
                             loc: StorageLoc,
                             time: Timing)      ->     SymVar:
-        """returns the correct smt variable from the SymStore"""
+    """returns the correct smt variable from the SymStore"""
 
-        if time == Pre():
-            store = prestore
-        else:
-            store = poststore
+    if time == Pre():
+        store = prestore
+    else:
+        store = poststore
 
-        if isinstance(loc, VarLoc):
-            var = store[loc.contract][loc.name]
-            assert not isinstance(var, Dict)
-            return var
-        
-        elif isinstance(loc, MappingLoc):
-            smt_args = []
-            for elem in loc.args:
-                smt_args.append(to_smt(prestore, poststore, history, elem))
+    if isinstance(loc, VarLoc):
+        var = store[loc.contract][loc.name]
+        assert not isinstance(var, Dict)
+        return var
+    
+    elif isinstance(loc, MappingLoc):
+        smt_args = []
+        for elem in loc.args:
+            smt_args.append(to_smt(prestore, poststore, history, elem))
 
-            func = generate_smt_storageloc(prestore, poststore, history, loc.loc, time)
-            assert isinstance(func, z3.FuncDeclRef)
-            return func(*smt_args) 
-        
-        else:
-            assert isinstance(loc, ContractLoc)
-            collect_list_of_keys = [loc.field]
-            while not isinstance(loc.loc, VarLoc):
-                loc = loc.loc
-                if isinstance(loc, ContractLoc):
-                    collect_list_of_keys = [loc.field] + collect_list_of_keys
-                else:
-                    assert False, "mappings returning contracts is currently not implemented"
-            print("orange")
-            collect_list_of_keys = [loc.loc.contract, loc.loc.name] + collect_list_of_keys
+        func = generate_smt_storageloc(prestore, poststore, history, loc.loc, time)
+        assert isinstance(func, z3.FuncDeclRef)
+        return func(*smt_args) 
+    
+    else:
+        assert isinstance(loc, ContractLoc)
+        collect_list_of_keys = [loc.field]
+        while not isinstance(loc.loc, VarLoc):
+            loc = loc.loc
+            if isinstance(loc, ContractLoc):
+                collect_list_of_keys = [loc.field] + collect_list_of_keys
+            else:
+                assert False, "mappings returning contracts is currently not implemented"
+        collect_list_of_keys = [loc.loc.contract, loc.loc.name] + collect_list_of_keys
 
-            return walk_the_storage(store[collect_list_of_keys[0]], collect_list_of_keys[1:])
+        return walk_the_storage(store[collect_list_of_keys[0]], collect_list_of_keys[1:])
 
 
 def gen_poststore(pre: PreStore, name: str) -> PreStore:
