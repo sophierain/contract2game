@@ -331,6 +331,7 @@ class Lt(Exp):
     """less than comparison of two integer expressions"""
     left: Exp
     right: Exp
+
     type: ActType = ActBool()
 
 @dataclass
@@ -424,9 +425,29 @@ class Pre(Timing):
 class Post(Timing):
     """Poststate"""
 
-# @dataclass
-# class HistoryRef(Timing):
-#     path: [str]
+
+
+# History Variables
+
+class HistItem(Exp): 
+    """Storage item relative to its path"""
+    loc: StorageLoc
+    hist: List[str]
+    type: ActType
+
+@dataclass
+class HistVar(Exp): 
+    """Variable relative to its path"""
+    name: str
+    hist: List[str]
+    type: ActType
+
+@dataclass
+class HistEnvVar(Exp): 
+    """environment variable relative to its path"""
+    name: str
+    hist: List[str]
+    type: ActType
 
 
 def translate2cnf(exp: Exp) -> Exp:
