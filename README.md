@@ -14,6 +14,16 @@ The tool will then attempt to verify two properties:
 1. All players following the "honest" path will never lose money if another player deviates
 2. It is not possible for a subset of players to collectively profit by deviating
 
+## Hacking
+
+```
+# bring up a dev shell with all required dependencies installed
+nix develop
+
+# run the tool
+python3 -m contract2game
+```
+
 ## Internals
 
 ### Act Specifications

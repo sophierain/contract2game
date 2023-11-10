@@ -1,7 +1,7 @@
 from typing import Union, Set, Dict, List, Any, Tuple
 from dataclasses import dataclass
-from parse_act import *
-from act_ast import *
+from ..act_py.parse import *
+from ..act_py.ast import *
 import z3
 import logging
 
@@ -11,14 +11,14 @@ import logging
 Integer = Union[int, z3.ArithRef]
 Boolean = Union[bool, z3.BoolRef]
 String = Union[str, z3.SeqRef]
-SymVar = Union[Integer, Boolean, String, z3.FuncDeclRef] 
+SymVar = Union[Integer, Boolean, String, z3.FuncDeclRef]
 #is_string, is_int, is_bool are the type check calls
 
 PreStore = Dict[str, Union[SymVar, 'PreStore']]
-SymStore = Dict[str, PreStore]       
+SymStore = Dict[str, PreStore]
 """
 x = z3.Int(<name>): z3.ArithRef                                         integer constant named <name>
-z = z3.Bool(<name>): z3.BoolRef   
+z = z3.Bool(<name>): z3.BoolRef
 s = z3.String(<name>): z3.SeqRef                                                  boolean constant named <name>
 y = z3.Function(<fct_name>, <z3 input sort(s)>, <z3 ouput sort>): z3.FuncDeclRef   uninterpreted function named <fct_name>
 """
@@ -35,13 +35,13 @@ class Tree:
     updates: List[Boolean]
     split_constraints: List[Boolean]
     children: Dict[str, 'Tree']
-   
+
 
 
 
 
     def __repr__(self, level = 0) -> str:
-        
+
         indent = "   "*level
         res = f"{indent}State: \n"
         res = res + f"{indent}   Storage:\n"
@@ -74,17 +74,17 @@ class Tree:
 # main functions
 
 def contract2tree(contract: Contract, storage: Storage, extra_constraints: List[Exp]) -> Tree:
-    """ 
+    """
     contract: contract to be analyzed
     storage: storage dict of contract, contains all variables to be considered
     extra_constraints: a list of user defined constraints to be enforced as preconditions
 
     returns: a tree containg all possible sequential executions of the differnt behaviors of the contract
-    
+
     """
 
     init_store, init_prec, init_updates = init_state(storage, contract.constructor, extra_constraints)
-    
+
     return generate_tree([], init_store, init_store, init_prec, init_updates, [], [], contract.name, contract.constructor, contract.behaviors)
 
 
@@ -94,11 +94,11 @@ def init_state(storage: Storage, ctor: Constructor, extraConstraints: List[Exp])
     ctor: constructor of the contract, might be used later
     extra_constraints: a list of user defined constraints to be enforced as preconditions List[Boolean]
 
-    returns: all ingredients to create the root of a tree containing translated storage information to smt concepts, 
+    returns: all ingredients to create the root of a tree containing translated storage information to smt concepts,
              and collected initial constraints from user
-    
+
     """
-    store: Dict = dict() 
+    store: Dict = dict()
     for key, value in storage.items():
         store[key] = dict()
         for nested_key, nested_value in value.items():
@@ -131,15 +131,15 @@ def init_state(storage: Storage, ctor: Constructor, extraConstraints: List[Exp])
 
 
 def generate_tree(
-                  constraints: List[Boolean], 
+                  constraints: List[Boolean],
                   initstore: SymStore,
                   store: SymStore,
                   prec: List[Boolean],
                   updates: List[Boolean],
-                  case_cond: List[Boolean], 
-                  history: List[str], 
-                  contract_name: str, 
-                  contr: Constructor, 
+                  case_cond: List[Boolean],
+                  history: List[str],
+                  contract_name: str,
+                  contr: Constructor,
                   behvs: List[Behavior])             -> Tree:
     """recursively extends the tree by applying all behaviors to all leaves until no new reachable states are found"""
 
@@ -155,7 +155,7 @@ def generate_tree(
             child_store, child_prec, child_updates, child_case = apply_behaviour(store, history + [child_name], contract_name, contr, behv)
             reachable = children_solver.check(child_prec + child_updates + child_case + to_add)
             if reachable == z3.sat:
-                children[child_name] = generate_tree(to_add, 
+                children[child_name] = generate_tree(to_add,
                                                      initstore,
                                                     child_store,
                                                     child_prec,
@@ -163,12 +163,12 @@ def generate_tree(
                                                     child_case,
                                                     history + [child_name],
                                                     contract_name,
-                                                    contr, 
+                                                    contr,
                                                     behvs)
             elif reachable == z3.unknown:
                 logging.info("solver returned 'unkown'")
                 assert False
-        
+
     return Tree(store, case_cond, prec, updates, [], children)
 
 
@@ -186,14 +186,14 @@ def slottype2smt(contract: str, name: str, slot: SlotType, storage: Storage) -> 
     elif isinstance(slot, AbiStringType):
         return z3.String(var_name)
 
-    elif isinstance(slot, ContractType): 
+    elif isinstance(slot, ContractType):
         assert slot.contract in storage #repeat stuff with storage[slot.contract] and add contract to the storage label
         smt_store = dict()
         for key, value in storage[slot.contract].items():
             # key: str, value: SlotType
             smt_store[key] = slottype2smt(to_storage_label(contract, name), key, value, storage)
         return smt_store
-        
+
     elif isinstance(slot, MappingType):
             if isinstance(slot.resultType, AbiBoolType):
                 result = z3.BoolSort()
@@ -251,8 +251,8 @@ def to_smt(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp
         Implies
 
         ITE
-        Eq 
-        Neq 
+        Eq
+        Neq
         InRange
 
         Lt
@@ -264,60 +264,60 @@ def to_smt(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp
         Sub
         Mul
         Div
-        Pow 
+        Pow
     """
     # variables, constants, functions
 
     if isinstance(exp, Lit):
         return exp.value
-    
-    elif isinstance(exp, Var): 
+
+    elif isinstance(exp, Var):
         if isinstance(exp.type, ActBool):
             return z3.Bool(to_label(history, exp.name))
         elif isinstance(exp.type, ActByteStr):
             return z3.String(to_label(history, exp.name))
         else:
             return z3.Int(to_label(history, exp.name))
-    
-    elif isinstance(exp, EnvVar): 
+
+    elif isinstance(exp, EnvVar):
         if isinstance(exp.type, ActBool):
             return z3.Bool(to_label(history, exp.name))
         elif isinstance(exp.type, ActByteStr):
             return z3.String(to_label(history, exp.name))
         else:
             return z3.Int(to_label(history, exp.name))
-       
+
     elif isinstance(exp, StorageItem):
-        gen_storeloc = generate_smt_storageloc(prestore, poststore, history, exp.loc, exp.time) 
+        gen_storeloc = generate_smt_storageloc(prestore, poststore, history, exp.loc, exp.time)
         assert not isinstance(gen_storeloc, z3.FuncDeclRef)
         return gen_storeloc
-    
+
     # boolean expressions
 
     elif isinstance(exp, And):
         return z3.And(to_bool(prestore, poststore, history, exp.left),
                       to_bool(prestore, poststore, history, exp.right)
                       )
-    
+
     elif isinstance(exp, Or):
-        return z3.Or(to_bool(prestore, poststore, history, exp.left), 
+        return z3.Or(to_bool(prestore, poststore, history, exp.left),
                      to_bool(prestore, poststore, history, exp.right)
                      )
-    
+
     elif isinstance(exp, Not):
         return z3.Not(to_bool(prestore, poststore, history, exp.value))
-    
+
     elif isinstance(exp, Implies):
-        return z3.Implies(to_bool(prestore, poststore, history, exp.left), 
+        return z3.Implies(to_bool(prestore, poststore, history, exp.left),
                           to_bool(prestore, poststore, history, exp.right)
                           )
-    
+
     elif isinstance(exp, ITE):
         return z3.If(to_bool(prestore, poststore, history, exp.condition),
                      to_smt(prestore, poststore, history, exp.left),
                      to_smt(prestore, poststore, history, exp.right)
-                     )                   
-    
+                     )
+
     elif isinstance(exp, Eq):
         both_bool = isinstance(exp.left.type, ActBool) and isinstance(exp.right.type, ActBool)
         both_int = isinstance(exp.left.type, ActInt) and isinstance(exp.right.type, ActInt)
@@ -330,7 +330,7 @@ def to_smt(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp
         both_int = isinstance(exp.left.type, ActInt) and isinstance(exp.right.type, ActInt)
         both_bytestr = isinstance(exp.left.type, ActByteStr) and isinstance(exp.right.type, ActByteStr)
         assert both_bool or both_int or both_bytestr, "left and right have to be of the same type"
-        return z3.Not(to_smt(prestore, poststore, history, exp.left) == 
+        return z3.Not(to_smt(prestore, poststore, history, exp.left) ==
                       to_smt(prestore, poststore, history, exp.right))
 
     elif isinstance(exp, InRange):
@@ -349,7 +349,7 @@ def to_smt(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp
                     to_bool(prestore, poststore, history, Le(min, exp.expr)),
                     to_bool(prestore, poststore, history, Le(exp.expr, max))
                     )
-    
+
     elif isinstance(exp, Lt):
         return to_int(prestore, poststore, history, exp.left) < \
                to_int(prestore, poststore, history, exp.right)
@@ -357,29 +357,29 @@ def to_smt(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp
     elif isinstance(exp, Le):
         return to_int(prestore, poststore, history, exp.left) <= \
                to_int(prestore, poststore, history, exp.right)
-    
+
     elif isinstance(exp, Gt):
         return to_int(prestore, poststore, history, exp.left) > \
                to_int(prestore, poststore, history, exp.right)
-    
+
     elif isinstance(exp, Ge):
         return to_int(prestore, poststore, history, exp.left) >= \
                to_int(prestore, poststore, history, exp.right)
 
     # integer expressions:
- 
+
     elif isinstance(exp, Add):
         return to_int(prestore, poststore, history, exp.left) + \
                to_int(prestore, poststore, history, exp.right)
-    
+
     elif isinstance(exp, Sub):
         return to_int(prestore, poststore, history, exp.left) - \
                to_int(prestore, poststore, history, exp.right)
-    
+
     elif isinstance(exp, Mul):
         return to_int(prestore, poststore, history, exp.left) * \
                to_int(prestore, poststore, history, exp.right)
-    
+
     elif isinstance(exp, Div):
         nom = to_int(prestore, poststore, history, exp.left)
         div = to_int(prestore, poststore, history, exp.left)
@@ -390,7 +390,7 @@ def to_smt(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp
             assert isinstance(res, z3.ArithRef)
             return res
 
-    
+
     elif isinstance(exp, Pow):
         left = to_int(prestore, poststore, history, exp.left)
         right = to_int(prestore, poststore, history, exp.right)
@@ -398,19 +398,19 @@ def to_smt(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp
         return left ** right
 
     else:
-        assert False 
-     
+        assert False
+
 
 def apply_behaviour(store: SymStore,
-                    history: List[str], 
-                    contract_name: str, 
+                    history: List[str],
+                    contract_name: str,
                     contr: Constructor,
                     behv: Behavior)         -> Tuple[SymStore, List[Boolean], List[Boolean], List[Boolean]]:
 
     new_storage = dict()
     for key, value in store.items():
         new_storage[key] = gen_poststore(value, history[-1])
-    
+
 
     prec = []
     updates = []
@@ -418,7 +418,7 @@ def apply_behaviour(store: SymStore,
 
     for exp in behv.caseConditions:
         case_cond.append(to_bool(store, new_storage, history, exp))
-  
+
     for exp in behv.preConditions:
         prec.append(to_bool(store, new_storage, history, exp))
 
@@ -431,7 +431,7 @@ def apply_behaviour(store: SymStore,
 
     for exp in behv.stateUpdates:
         updates.append(to_bool(store, new_storage, history, exp))
-   
+
     no_update_constraints = no_update(store, new_storage, history, contract_name, behv.stateUpdates)
 
     return new_storage, prec, updates + no_update_constraints, case_cond
@@ -440,7 +440,7 @@ def apply_behaviour(store: SymStore,
 def generate_smt_storageloc(
                             prestore: SymStore,
                             poststore: SymStore,
-                            history: List[str], 
+                            history: List[str],
                             loc: StorageLoc,
                             time: Timing)      ->     SymVar:
     """returns the correct smt variable from the SymStore"""
@@ -454,7 +454,7 @@ def generate_smt_storageloc(
         var = store[loc.contract][loc.name]
         assert not isinstance(var, Dict)
         return var
-    
+
     elif isinstance(loc, MappingLoc):
         smt_args = []
         for elem in loc.args:
@@ -462,8 +462,8 @@ def generate_smt_storageloc(
 
         func = generate_smt_storageloc(prestore, poststore, history, loc.loc, time)
         assert isinstance(func, z3.FuncDeclRef)
-        return func(*smt_args) 
-    
+        return func(*smt_args)
+
     else:
         assert isinstance(loc, ContractLoc)
         collect_list_of_keys = [loc.field]
@@ -488,10 +488,10 @@ def gen_poststore(pre: PreStore, name: str) -> PreStore:
                 z3sorts = []
                 arity = value.arity()
                 for i in range(arity):
-                    z3sorts.append(value.domain(i)) 
+                    z3sorts.append(value.domain(i))
                 z3sorts.append(value.range())
-                post[key] = z3.Function(name + "_" + value.name(), *z3sorts) 
-            
+                post[key] = z3.Function(name + "_" + value.name(), *z3sorts)
+
             elif z3.is_int(value):
                 assert isinstance(value, z3.ArithRef)
                 post[key] = z3.Int(name + "_" + value.decl().name())
@@ -501,7 +501,7 @@ def gen_poststore(pre: PreStore, name: str) -> PreStore:
             elif z3.is_string(value):
                 assert isinstance(value, z3.SeqRef)
                 post[key] = z3.String(name + "_" + value.decl().name())
-            else: 
+            else:
                 assert False, "unsupported z3 type: " + str(type(value))
         else:
             post[key] = gen_poststore(value, name)
@@ -511,15 +511,15 @@ def gen_poststore(pre: PreStore, name: str) -> PreStore:
 
 def no_update(prestore: SymStore, poststore: SymStore, history: List[str], main_contr: str, updates: List[Exp]) -> List[Boolean]:
     """Identifies all SymVars from poststore that are not assigned a new value in the updates contraints.
-    Returns a list of constraints that assert the not-updated poststore Symvars have the same value as the 
+    Returns a list of constraints that assert the not-updated poststore Symvars have the same value as the
     respective prestore symvars.
     Only add the constraints for the main contract, others irrelevant
     """
 
     noup_all = copy_symstore(prestore)
-    # delete redundant info - variables of other than main contract, the accessed ones will appear in a nested dict 
+    # delete redundant info - variables of other than main contract, the accessed ones will appear in a nested dict
     noup = noup_all[main_contr]
-    supp_fctargs: Dict[str, List[List[Integer | Boolean | String]]] = dict() 
+    supp_fctargs: Dict[str, List[List[Integer | Boolean | String]]] = dict()
 
 
     for update in updates:
@@ -549,7 +549,7 @@ def no_update(prestore: SymStore, poststore: SymStore, history: List[str], main_
                 supp_fctargs[keys].append([to_smt(prestore, poststore, history, elem) for elem in loc.args])
             else:
                 supp_fctargs[keys] = [[to_smt(prestore, poststore, history, elem) for elem in loc.args]]
-        else: 
+        else:
             # contractloc case
             key_list: List[str] = []
             while isinstance(loc, ContractLoc):
@@ -576,17 +576,17 @@ def no_update(prestore: SymStore, poststore: SymStore, history: List[str], main_
 
 
 def noup_cons(prestore: PreStore,
-              poststore: PreStore, 
+              poststore: PreStore,
               fsupp: Dict[str, List[List[Integer | Boolean | String]]],
               path: str
               )                                                    -> List[Boolean]:
 
     constraints = []
-    for key, value in prestore.items():  
+    for key, value in prestore.items():
         if path == "":
             path = key
         else:
-            path = path + "_" + key  
+            path = path + "_" + key
 
         if isinstance(value, int) or z3.is_int(value) \
             or isinstance(value, bool) or z3.is_bool(value):
@@ -610,7 +610,7 @@ def noup_cons(prestore: PreStore,
 
 def func_update(pref: z3.FuncDeclRef, postf: z3.FuncDeclRef, exc: List[List[Integer | Boolean | String]]) -> Boolean:
     """ construct forall quantified formula stating 'pref'=='postf' everywhere except on the 'exc' points"""
-    
+
     fresh_vars = []
     assert pref.arity() == postf.arity(), "functions incompatible, different arities"
     for i in range(pref.arity()):
@@ -664,7 +664,7 @@ def copy_prestore(store: PreStore) -> PreStore:
 def walk_the_storage(store: PreStore, keys: List) -> SymVar:
     maybe_symvar = store[keys[0]]
     if len(keys) == 1:
-        assert not isinstance(maybe_symvar, Dict), "contradicting types" 
+        assert not isinstance(maybe_symvar, Dict), "contradicting types"
         return maybe_symvar
     else:
         if isinstance(maybe_symvar, Dict):
@@ -704,36 +704,36 @@ def to_node_name(case: List[Exp], initstore: SymStore)-> str:
 def to_node_smt(exp: Exp)-> str:
     if isinstance(exp, Lit):
         return str(exp.value)
-    
-    elif isinstance(exp, Var): 
+
+    elif isinstance(exp, Var):
         return str(exp.name)
-    
-    elif isinstance(exp, EnvVar): 
+
+    elif isinstance(exp, EnvVar):
         return str(exp.name)
-       
+
     elif isinstance(exp, StorageItem):
-        gen_storeloc = storageloc2node(exp.loc, exp.time) 
+        gen_storeloc = storageloc2node(exp.loc, exp.time)
         return gen_storeloc
-    
+
     # boolean expressions
 
     elif isinstance(exp, And):
         return "(" + to_node_smt(exp.left) + " and " +to_node_smt(exp.right) +")"
-    
+
     elif isinstance(exp, Or):
         return "(" + to_node_smt(exp.left) + " or " +to_node_smt(exp.right) +")"
-    
+
     elif isinstance(exp, Not):
         return  "not(" + to_node_smt(exp.value) + ")"
-    
+
     elif isinstance(exp, Implies):
         return "(" + to_node_smt(exp.left) + " -> " +to_node_smt(exp.right) +")"
-    
+
     elif isinstance(exp, ITE):
         return  "if " + to_node_smt(exp.condition) + \
                 " then " + to_node_smt(exp.left) + \
-                " else " + to_node_smt(exp.right)                        
-    
+                " else " + to_node_smt(exp.right)
+
     elif isinstance(exp, Eq):
         return "(" + to_node_smt(exp.left) + " = " +to_node_smt(exp.right) +")"
 
@@ -750,37 +750,37 @@ def to_node_smt(exp: Exp)-> str:
         else:
             assert False
         return to_node_smt(exp.expr) + " inrange " + ran
-    
+
     elif isinstance(exp, Lt):
         return "(" + to_node_smt(exp.left) + " < " + to_node_smt(exp.right) +")"
 
     elif isinstance(exp, Le):
         return "(" + to_node_smt(exp.left) + " <= " + to_node_smt(exp.right) +")"
 
-    
+
     elif isinstance(exp, Ge):
         return "(" + to_node_smt(exp.left) + " >= " +to_node_smt(exp.right) +")"
 
     # integer expressions:
- 
+
     elif isinstance(exp, Add):
         return "(" + to_node_smt(exp.left) + " + " +to_node_smt(exp.right) +")"
-    
+
     elif isinstance(exp, Sub):
         return "(" + to_node_smt(exp.left) + " - " +to_node_smt(exp.right) +")"
-    
+
     elif isinstance(exp, Mul):
         return "(" + to_node_smt(exp.left) + " * " +to_node_smt(exp.right) +")"
-    
+
     elif isinstance(exp, Div):
         return "(" + to_node_smt(exp.left) + " / " +to_node_smt(exp.right) +")"
 
-    
+
     elif isinstance(exp, Pow):
         return "(" + to_node_smt(exp.left) + " ** " +to_node_smt(exp.right) +")"
 
     else:
-        assert False 
+        assert False
 
 def storageloc2node(loc: StorageLoc, time: Timing) -> str:
 
@@ -792,14 +792,14 @@ def storageloc2node(loc: StorageLoc, time: Timing) -> str:
 
         if isinstance(loc, VarLoc):
             return pref + loc.contract + "." + loc.name + ")"
-        
+
         elif isinstance(loc, MappingLoc):
             smt_args = []
             for elem in loc.args:
                 smt_args.append(to_node_smt(elem))
             func = storageloc2node(loc.loc, time)
-            return pref + func + ")(" + ", ".join(smt_args) + ")" 
-        
+            return pref + func + ")(" + ", ".join(smt_args) + ")"
+
         else:
             assert isinstance(loc, ContractLoc)
             collect_list_of_keys = [loc.field]
