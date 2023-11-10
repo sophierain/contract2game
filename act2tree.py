@@ -29,6 +29,8 @@ else:
 # parse json into an Act instance
 act = parse_act_json(obj)
 
+act.to_cnf()
+
 act_trees = []
 for considered_contract in act.find_maincontract():
        act_trees.append(contract2tree(considered_contract, act.store, extra_constraints))

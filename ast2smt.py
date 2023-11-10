@@ -23,13 +23,13 @@ s = z3.String(<name>): z3.SeqRef                                                
 y = z3.Function(<fct_name>, <z3 input sort(s)>, <z3 ouput sort>): z3.FuncDeclRef   uninterpreted function named <fct_name>
 """
 
-Upstream = List[str] # path through the tree as list of str
+
+
 
 @dataclass
 class Tree:
     """a node with possibly 0 children"""
     store: SymStore
-    state_tracker: Dict[SymStore, Tuple[SymVar, List[Upstream]]]
     beh_case: List[Boolean]
     preconditions: List[Boolean]
     updates: List[Boolean]
@@ -40,12 +40,12 @@ class Tree:
 
 
 
-    def __repr__(self, level = 0) -> str:  # add tracker at some point...
+    def __repr__(self, level = 0) -> str:
         
         indent = "   "*level
         res = f"{indent}State: \n"
         res = res + f"{indent}   Storage:\n"
-        for key, value in self.state.storage.items():
+        for key, value in self.store.items():
             res = res + f"      {indent}{key}: {value}\n"
         res = res + f"{indent}   Case:\n"
         for elem in self.beh_case:
@@ -83,12 +83,12 @@ def contract2tree(contract: Contract, storage: Storage, extra_constraints: List[
     
     """
 
-    init_store, init_tracker, init_prec, init_updates = init_state(storage, contract.constructor, extra_constraints)
+    init_store, init_prec, init_updates = init_state(storage, contract.constructor, extra_constraints)
     
-    return generate_tree([], init_store, init_store, init_tracker, init_prec, init_updates, [], [], contract.name, contract.constructor, contract.behaviors)
+    return generate_tree([], init_store, init_store, init_prec, init_updates, [], [], contract.name, contract.constructor, contract.behaviors)
 
 
-def init_state(storage: Storage, ctor: Constructor, extraConstraints: List[Exp]) -> (SymStore, Dict[SymStore, Tuple[SymVar, List[Upstream]]], List[Boolean], List[Boolean]):
+def init_state(storage: Storage, ctor: Constructor, extraConstraints: List[Exp]) -> Tuple[SymStore, List[Boolean], List[Boolean]]:
     """
     storage: storage dict of contract, contains all variables to be considered
     ctor: constructor of the contract, might be used later
@@ -98,7 +98,7 @@ def init_state(storage: Storage, ctor: Constructor, extraConstraints: List[Exp])
              and collected initial constraints from user
     
     """
-    store: Dict = dict()
+    store: Dict = dict() 
     for key, value in storage.items():
         store[key] = dict()
         for nested_key, nested_value in value.items():
@@ -113,16 +113,27 @@ def init_state(storage: Storage, ctor: Constructor, extraConstraints: List[Exp])
     for exp in extraConstraints:
         prec.append(to_bool(store, store, [], exp))
 
-    tracker = dict() #to be implemented!!!
+    # store_with_tracker = init_tracker(store, ctor.initial_storage)
 
-    return store, tracker, prec, updates
+    return store, prec, updates
+
+
+
+# def init_tracker(store: SymStore, updates: List[Exp]) -> SymStore:
+#     for elem in updates:
+#         assert isinstance(elem, Eq)
+#         assert isinstance(elem.left, StorageItem)
+
+#         tracker = tracker_contr(store) ### ???
+#     return tracker
+
+
 
 
 def generate_tree(
                   constraints: List[Boolean], 
                   initstore: SymStore,
                   store: SymStore,
-                  tracker: Dict[SymStore, Tuple[SymVar, List[Upstream]]],
                   prec: List[Boolean],
                   updates: List[Boolean],
                   case_cond: List[Boolean], 
@@ -141,13 +152,12 @@ def generate_tree(
         child_name = behv.name + "__" + to_node_name(behv.caseConditions, initstore)
         # naive breaking condition: no 2 functions (behavior) can be called twice
         if not child_name in history:
-            child_store, child_tracker, child_prec, child_updates, child_case = apply_behaviour(store, tracker, history + [child_name], contract_name, contr, behv)
+            child_store, child_prec, child_updates, child_case = apply_behaviour(store, history + [child_name], contract_name, contr, behv)
             reachable = children_solver.check(child_prec + child_updates + child_case + to_add)
             if reachable == z3.sat:
                 children[child_name] = generate_tree(to_add, 
                                                      initstore,
                                                     child_store,
-                                                    child_tracker,
                                                     child_prec,
                                                     child_updates,
                                                     child_case,
@@ -159,7 +169,7 @@ def generate_tree(
                 logging.info("solver returned 'unkown'")
                 assert False
         
-    return Tree(store, tracker, case_cond, prec, updates, [], children)
+    return Tree(store, case_cond, prec, updates, [], children)
 
 
 def slottype2smt(contract: str, name: str, slot: SlotType, storage: Storage) -> SymVar | PreStore :
@@ -392,11 +402,10 @@ def to_smt(prestore: SymStore, poststore: SymStore, history: List[str], exp: Exp
      
 
 def apply_behaviour(store: SymStore,
-                    tracker: Dict[SymStore, Tuple[SymVar, List[Upstream]]],
                     history: List[str], 
                     contract_name: str, 
                     contr: Constructor,
-                    behv: Behavior)         -> Tuple[SymStore, Dict[SymStore, Tuple[SymVar, List[Upstream]]], List[Boolean], List[Boolean], List[Boolean]]:
+                    behv: Behavior)         -> Tuple[SymStore, List[Boolean], List[Boolean], List[Boolean]]:
 
     new_storage = dict()
     for key, value in store.items():
@@ -425,9 +434,7 @@ def apply_behaviour(store: SymStore,
    
     no_update_constraints = no_update(store, new_storage, history, contract_name, behv.stateUpdates)
 
-    new_tracker = dict() # to be implemented!!! depends on tracker, updates and no_updates
-
-    return new_storage, new_tracker, prec, updates + no_update_constraints, case_cond
+    return new_storage, prec, updates + no_update_constraints, case_cond
 
 
 def generate_smt_storageloc(
