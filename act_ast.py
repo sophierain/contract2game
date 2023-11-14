@@ -331,7 +331,6 @@ class Lt(Exp):
     """less than comparison of two integer expressions"""
     left: Exp
     right: Exp
-
     type: ActType = ActBool()
 
 @dataclass
@@ -450,9 +449,11 @@ class HistEnvVar(Exp):
     type: ActType
 
 
+# all cnf functions
+
 def translate2cnf(exp: Exp) -> Exp:
 
-    basic = tocnf(exp)
+    basic = tocnf1(exp)
 
     in_nnf = nnf(basic)
 
@@ -460,19 +461,19 @@ def translate2cnf(exp: Exp) -> Exp:
 
     return in_cnf
 
-def tocnf(exp: Exp) -> Exp:
+def tocnf1(exp: Exp) -> Exp:
 
     if isinstance(exp, And):
-        return And(tocnf(exp.left), tocnf(exp.right))
+        return And(tocnf1(exp.left), tocnf1(exp.right))
 
     elif isinstance(exp, Or):
-        return Or(tocnf(exp.left), tocnf(exp.right))
+        return Or(tocnf1(exp.left), tocnf1(exp.right))
 
     elif isinstance(exp, Not):
-        return (Not(tocnf(exp.value)))   
+        return (Not(tocnf1(exp.value)))   
         
     elif isinstance(exp, Implies):
-        return Or(Not(tocnf(exp.left)), tocnf(exp.right))
+        return Or(Not(tocnf1(exp.left)), tocnf1(exp.right))
 
     elif isinstance(exp, ITE): 
         return ITE(translate2cnf(exp.condition), translate2cnf(exp.left), translate2cnf(exp.right), exp.type)
@@ -548,6 +549,52 @@ def cnf(exp: Exp) -> Exp:
             else:
                 return cnf(Or(cnf(exp.left), cnf(exp.right)))
 
+def new_atom(exp: Exp) -> bool:
+
+    if exp.type != ActBool():
+        return True
+        
+    else: 
+        atom = isinstance(exp, Lit) or isinstance(exp, Var) or isinstance(exp, EnvVar) or isinstance(exp, StorageItem) or \
+                isinstance(exp, Le) or isinstance(exp, Lt) or isinstance(exp, Ge) or isinstance(exp, Gt) or \
+                isinstance(exp, Eq) or isinstance(exp, Neq) 
+
+        return atom  
+
+def new_lit(exp: Exp) -> bool:
+    if new_atom(exp):
+        return True
+    
+    elif isinstance(exp, Not):
+        assert new_atom(exp.value)
+        return True
+    
+    elif isinstance(exp, Or):
+        return new_lit(exp.left) and new_lit(exp.right)
+    
+    else:
+        return False
+
+def is_cnf(exp: Exp) -> bool:
+    if new_lit(exp):
+        return True
+    elif isinstance(exp, And):
+        return is_cnf(exp.left) and is_cnf(exp.right)
+    else:
+        return False
+
+def to_cnf(exp: Exp) -> List[Exp]:
+    cnf = translate2cnf(exp)
+    return cnf2list(cnf)
+
+def cnf2list(cnf: Exp) -> List[Exp]:
+    if not isinstance(cnf, And):
+        return [cnf]
+    else:
+        return cnf2list(cnf.left) + cnf2list(cnf.right)
+    
+
+
 
 
 # def cnf_exp(exp: Exp) -> Exp:
@@ -599,44 +646,6 @@ def cnf(exp: Exp) -> Exp:
 #             assert False, "unsupported exp: " + str(type(exp))
 
 
-def new_atom(exp: Exp) -> bool:
-
-    if exp.type != ActBool():
-        return True
-        
-    else: 
-        atom = isinstance(exp, Lit) or isinstance(exp, Var) or isinstance(exp, EnvVar) or isinstance(exp, StorageItem) or \
-                isinstance(exp, Le) or isinstance(exp, Lt) or isinstance(exp, Ge) or isinstance(exp, Gt) or \
-                isinstance(exp, Eq) or isinstance(exp, Neq) 
-
-        return atom  
-
-def new_lit(exp: Exp) -> bool:
-    if new_atom(exp):
-        return True
-    
-    elif isinstance(exp, Not):
-        assert new_atom(exp.value)
-        return True
-    
-    elif isinstance(exp, Or):
-        return new_lit(exp.left) and new_lit(exp.right)
-    
-    else:
-        return False
-
-def is_cnf(exp: Exp) -> bool:
-    if new_lit(exp):
-        return True
-    elif isinstance(exp, And):
-        return is_cnf(exp.left) and is_cnf(exp.right)
-    else:
-        return False
-
-
-
-
-
 # def is_atom(exp: Exp) -> bool:
 
 #     if exp.type != ActBool():
@@ -668,13 +677,3 @@ def is_cnf(exp: Exp) -> bool:
 #     else:
 #         return False
     
-
-def to_cnf(exp: Exp) -> List[Exp]:
-    cnf = translate2cnf(exp)
-    return cnf2list(cnf)
-
-def cnf2list(cnf: Exp) -> List[Exp]:
-    if not isinstance(cnf, And):
-        return [cnf]
-    else:
-        return cnf2list(cnf.left) + cnf2list(cnf.right)
