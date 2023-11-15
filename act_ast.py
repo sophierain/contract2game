@@ -154,47 +154,118 @@ class AbiType(ValueType, metaclass=ABCMeta):
 class AbiUIntType(AbiType):
     size: int
 
+    def is_equiv(self, other: AbiType):
+        if not isinstance(other, AbiUIntType):
+            return False
+        if self.size != other.size:
+            return False
+        return True
+
 @dataclass
 class AbiIntType(AbiType):
     size: int
+
+    def is_equiv(self, other: AbiType):
+        if not isinstance(other, AbiIntType):
+            return False
+        if self.size != other.size:
+            return False
+        return True
 
 @dataclass
 class AbiAddressType(AbiType):
     """address type"""
 
+    def is_equiv(self, other: AbiType):
+        if not isinstance(other, AbiAddressType):
+            return False
+        return True
+
 @dataclass
 class AbiBoolType(AbiType):
     """bool type"""
+
+    def is_equiv(self, other: AbiType):
+        if not isinstance(other, AbiBoolType):
+            return False
+        return True
 
 @dataclass
 class AbiBytesType(AbiType):
     size: int
 
+    def is_equiv(self, other: AbiType):
+        if not isinstance(other, AbiBytesType):
+            return False
+        if self.size != other.size:
+            return False
+        return True
+
 @dataclass
 class AbiBytesDynamicType(AbiType):
     """dynamic bytes type"""
+
+    def is_equiv(self, other: AbiType):
+        if not isinstance(other, AbiBytesDynamicType):
+            return False
+        return True
 
 @dataclass
 class AbiStringType(AbiType):
     """string type"""
 
+    def is_equiv(self, other: AbiType):
+        if not isinstance(other, AbiStringType):
+            return False
+        return True
+
 @dataclass
 class AbiArrayDynamicType(AbiType):
     arraytype: AbiType
+
+    def is_equiv(self, other: AbiType):
+        if not isinstance(other, AbiArrayDynamicType):
+            return False
+        if self.arraytype.is_equiv(other.arraytype):
+            return False
+        return True
 
 @dataclass
 class AbiArrayType(AbiType):
     size: int
     arraytype: AbiType
 
+    def is_equiv(self, other: AbiType):
+        if not isinstance(other, AbiArrayType):
+            return False
+        if self.size != other.size:
+            return False
+        if self.arraytype.is_equiv(other.arraytype):
+            return False
+        return True
+
 @dataclass
 class AbiTupleType(AbiType):
     tuple: List[AbiType]
+
+    def is_equiv(self, other: AbiType):
+        if not isinstance(other, AbiTupleType):
+            return False
+        if len(self.tuple) != len(other.tuple):
+            return False
+        for i in range(len(self.tuple)):
+            if self.tuple[i].is_equiv(other.tuple[i]):
+                return False
+        return True
 
 @dataclass
 class AbiFunctionType(AbiType):
     """function type"""
 
+    def is_equiv(self, other: AbiType):
+        if not isinstance(other, AbiFunctionType):
+            return False
+        return True
 
 
 
@@ -229,10 +300,28 @@ class Lit(Exp):
     value: Union[bool, int, str]
     type: ActType
 
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Lit):
+            return False
+        if self.type != other.type:
+            return False
+        if self.value != other.value:
+            return False
+        return True
+
 @dataclass
 class Var(Exp):
     name: str
     type: ActType
+
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Var):
+            return False
+        if self.type != other.type:
+            return False
+        if self.name != other.name:
+            return False
+        return True
 
 @dataclass
 class And(Exp):
@@ -241,6 +330,17 @@ class And(Exp):
     right: Exp
     type: ActType = ActBool()
 
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, And):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.left.is_equiv(other.left):
+            return False
+        if not self.right.is_equiv(other.right):
+            return False
+        return True
+
 @dataclass
 class Or(Exp):
     """disjunction of two boolean expressions"""
@@ -248,11 +348,31 @@ class Or(Exp):
     right: Exp
     type: ActType = ActBool()
 
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Or):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.left.is_equiv(other.left):
+            return False
+        if not self.right.is_equiv(other.right):
+            return False
+        return True
+
 @dataclass
 class Not(Exp):
     """Negation of a boolean expression"""
     value: Exp
     type: ActType = ActBool()
+
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Not):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.value.is_equiv(other.value):
+            return False
+        return True
 
 @dataclass
 class Implies(Exp):
@@ -260,6 +380,17 @@ class Implies(Exp):
     left: Exp
     right: Exp
     type: ActType = ActBool()
+
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Implies):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.left.is_equiv(other.left):
+            return False
+        if not self.right.is_equiv(other.right):
+            return False
+        return True
 
 @dataclass
 class ITE(Exp):
@@ -269,23 +400,69 @@ class ITE(Exp):
     right: Exp
     type: ActType
 
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, ITE):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.condition.is_equiv(other.condition):
+            return False
+        if not self.left.is_equiv(other.left):
+            return False
+        if not self.right.is_equiv(other.right):
+            return False
+        return True
+
 @dataclass
 class Eq(Exp):
     left: Exp
     right: Exp
     type: ActType = ActBool()
 
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Eq):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.left.is_equiv(other.left):
+            return False
+        if not self.right.is_equiv(other.right):
+            return False
+        return True
+
 @dataclass
 class Neq(Exp):
     left: Exp
     right: Exp
     type: ActType = ActBool()
+
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Neq):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.left.is_equiv(other.left):
+            return False
+        if not self.right.is_equiv(other.right):
+            return False
+        return True
              
 @dataclass
 class InRange(Exp):
     expr: Exp
     abitype: AbiType # only allow (int, uint, address, string) 
     type: ActType = ActBool()
+
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, InRange):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.expr.is_equiv(other.expr):
+            return False
+        if not self.abitype.is_equiv(other.abitype):
+            return False
+        return True
     
 
 # arithmetic
@@ -296,12 +473,34 @@ class Add(Exp):
     right: Exp
     type: ActType = ActInt()
 
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Add):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.left.is_equiv(other.left):
+            return False
+        if not self.right.is_equiv(other.right):
+            return False
+        return True
+
 @dataclass 
 class Sub(Exp):
     """subtraction of two integer expressions"""
     left: Exp
     right: Exp
     type: ActType = ActInt()
+
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Sub):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.left.is_equiv(other.left):
+            return False
+        if not self.right.is_equiv(other.right):
+            return False
+        return True
 
 @dataclass
 class Mul(Exp):
@@ -310,12 +509,34 @@ class Mul(Exp):
     right: Exp
     type: ActType = ActInt()
 
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Mul):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.left.is_equiv(other.left):
+            return False
+        if not self.right.is_equiv(other.right):
+            return False
+        return True
+
 @dataclass
 class Div(Exp):
     """division of two integer expressions"""
     left: Exp
     right: Exp
     type: ActType = ActInt()
+
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Div):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.left.is_equiv(other.left):
+            return False
+        if not self.right.is_equiv(other.right):
+            return False
+        return True
 
 @dataclass
 class Pow(Exp):
@@ -324,6 +545,16 @@ class Pow(Exp):
     right: Exp
     type: ActType = ActInt()
 
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Pow):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.left.is_equiv(other.left):
+            return False
+        if not self.right.is_equiv(other.right):
+            return False
+        return True
 
 # relations 
 @dataclass
@@ -333,12 +564,34 @@ class Lt(Exp):
     right: Exp
     type: ActType = ActBool()
 
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Lt):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.left.is_equiv(other.left):
+            return False
+        if not self.right.is_equiv(other.right):
+            return False
+        return True
+
 @dataclass
 class Le(Exp):
     """less than or equal comparison of two integer expressions"""
     left: Exp
     right: Exp
     type: ActType = ActBool()
+
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Le):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.left.is_equiv(other.left):
+            return False
+        if not self.right.is_equiv(other.right):
+            return False
+        return True
 
 @dataclass
 class Gt(Exp):
@@ -347,6 +600,17 @@ class Gt(Exp):
     right: Exp
     type: ActType = ActBool()
 
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Gt):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.left.is_equiv(other.left):
+            return False
+        if not self.right.is_equiv(other.right):
+            return False
+        return True
+
 @dataclass
 class Ge(Exp):
     """greater than or equal comparison of two integer expressions"""
@@ -354,7 +618,16 @@ class Ge(Exp):
     right: Exp
     type: ActType = ActBool()
 
-
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, Ge):
+            return False
+        if self.type != other.type:
+            return False
+        if not self.left.is_equiv(other.left):
+            return False
+        if not self.right.is_equiv(other.right):
+            return False
+        return True
 
     
 # --- environment Variables ---
@@ -365,6 +638,15 @@ class EnvVar(Exp):
     name: str
     type: ActType
 
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, EnvVar):
+            return False
+        if self.type != other.type:
+            return False
+        if self.name != other.name:
+            return False
+        return True
+
 @dataclass    
 class StorageItem(Exp): 
     """This is TItem in TimeAgnostic.hs"""
@@ -372,7 +654,16 @@ class StorageItem(Exp):
     time: Timing
     type: ActType
 
-
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, StorageItem):
+            return False
+        if self.type != other.type:
+            return False
+        if self.time != other.time:
+            return False
+        if not self.loc.is_equiv(other.loc):
+            return False
+        return True
 
 
 # --- Storage Location ---
@@ -390,6 +681,15 @@ class VarLoc(StorageLoc):
     # the name of the storage location
     name: str
 
+    def is_equiv(self, other: StorageLoc) -> bool:
+        if not isinstance(other, VarLoc):
+            return False
+        if self.contract != other.contract:
+            return False
+        if self.name != other.name:
+            return False
+        return True
+
 @dataclass    
 class MappingLoc(StorageLoc):
     """A fully applied lookup in a (potentially nested) mapping
@@ -399,6 +699,18 @@ class MappingLoc(StorageLoc):
     loc: StorageLoc
     # the arguments to the mapping that give us an actual location in storage (e.g. the [4][3] in m[4][3])
     args: List[Exp]
+
+    def is_equiv(self, other: StorageLoc) -> bool:
+        if not isinstance(other, MappingLoc):
+            return False
+        if not self.loc.is_equiv(other.loc):
+            return False
+        if len(self.args) != len(other.args):
+            return False
+        for i in range(len(self.args)):
+            if not self.args[i].is_equiv(other.args[i]):
+                return False
+        return True
 
 @dataclass    
 class ContractLoc(StorageLoc):
@@ -411,6 +723,17 @@ class ContractLoc(StorageLoc):
     contract: str
     # the name of the field (e.g. the "x" in c.x)
     field: str
+
+    def is_equiv(self, other: StorageLoc) -> bool:
+        if not isinstance(other, ContractLoc):
+            return False
+        if self.contract != other.contract:
+            return False
+        if self.field != other.field:
+            return False
+        if not self.loc.is_equiv(other.loc):
+            return False
+        return True
 
 
 class Timing(metaclass=ABCMeta):
@@ -427,12 +750,26 @@ class Post(Timing):
 
 
 # History Variables
-
+@dataclass
 class HistItem(Exp): 
     """Storage item relative to its path"""
     loc: StorageLoc
     hist: List[str]
     type: ActType
+
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, HistItem):
+            return False
+        if self.type != other.type:
+            return False
+        if len(self.hist) != len(other.hist):
+            return False
+        for i in range(len(self.hist)):
+            if self.hist[i] != other.hist[i]:
+                return False
+        if not self.loc.is_equiv(other.loc):
+            return False
+        return True
 
 @dataclass
 class HistVar(Exp): 
@@ -441,12 +778,40 @@ class HistVar(Exp):
     hist: List[str]
     type: ActType
 
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, HistVar):
+            return False
+        if self.type != other.type:
+            return False
+        if len(self.hist) != len(other.hist):
+            return False
+        for i in range(len(self.hist)):
+            if self.hist[i] != other.hist[i]:
+                return False
+        if self.name != other.name:
+            return False
+        return True
+
 @dataclass
 class HistEnvVar(Exp): 
     """environment variable relative to its path"""
     name: str
     hist: List[str]
     type: ActType
+
+    def is_equiv(self, other: Exp) -> bool:
+        if not isinstance(other, HistEnvVar):
+            return False
+        if self.type != other.type:
+            return False
+        if len(self.hist) != len(other.hist):
+            return False
+        for i in range(len(self.hist)):
+            if self.hist[i] != other.hist[i]:
+                return False
+        if self.name != other.name:
+            return False
+        return True
 
 
 # all cnf functions

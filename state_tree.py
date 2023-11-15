@@ -25,19 +25,32 @@ y = z3.Function(<fct_name>, <z3 input sort(s)>, <z3 ouput sort>): z3.FuncDeclRef
 """
 
 @dataclass
-class AntiMap:
+class AntiMap(StorageLoc):
     loc: StorageLoc
     loa: List[List[Exp]]
-    hist: List[str]
-    type: ActType
 
     def extend_loa(self, args: List[Exp]):
         assert args not in self.loa
         self.loa.append(args)
 
+    def is_equiv(self, other: StorageLoc) -> bool:
+        if not isinstance(other, AntiMap):
+            return False
+        if not self.loc.is_equiv(other.loc):
+            return False
+        if len(self.loa) != len(other.loa):
+            return False
+        for i in range(len(self.loa)):
+            if len(self.loa[i]) != len(other.loa[i]):
+                return False
+            for j in range(len(self.loa[i])):
+                if not self.loa[i][j].is_equiv(other.loa[i][j]):
+                    return False
+        return True
+
 @dataclass
 class TrackerElem:
-    item: Union[HistItem, AntiMap]
+    item: HistItem
     value: Exp
     upstream: List[str]
 
@@ -147,25 +160,28 @@ def init_tracker(updates: List[Exp]) -> Tracker:
         if isinstance(item.loc, MappingLoc): # checking if we have seen this mapping before
             t_items = [elem.item for elem in tracker]
             func = item.loc.loc
-            is_new = [key.loc == func and isinstance(key, AntiMap) for key in t_items]
 
-            if not any(is_new): # seeing this mapping for the first time
-                antimap = AntiMap(func, [item.loc.args], item.hist, item.type)
+            is_new = True
+            for i in len(t_items):
+                if isinstance(t_items[i].loc, AntiMap):
+                    if func.is_equiv(t_items[i].loc.loc, []): 
+                        # we have seen this mapping before and have to update the exception list loa
+                        assert is_new == True
+                        is_new = False
+                        anti_elem = tracker[i] # found the trackerelem antimap of the current mapping loc
+                        anti_elem.item.loc.extend_loa(item.loc.args) # extend exception list with current arguments
+                        # this also extends tracker
+
+            if is_new: # seeing this mapping for the first time
+                antimap = AntiMap(func, [item.loc.args])
+                anti_hist = HistItem(antimap, item.hist, item.type)
                 if item.type == ActByteStr():
-                    anti_elem = TrackerElem(antimap, Lit("", ActByteStr()), upstream)
+                    anti_elem = TrackerElem(anti_hist, Lit("", ActByteStr()), upstream)
                 elif item.type == ActBool():
-                    anti_elem = TrackerElem(antimap, Lit(False, ActBool()), upstream)
+                    anti_elem = TrackerElem(anti_hist, Lit(False, ActBool()), upstream)
                 else:
-                    anti_elem = TrackerElem(antimap, Lit(0, ActInt()), upstream)
+                    anti_elem = TrackerElem(anti_hist, Lit(0, ActInt()), upstream)
                 tracker.append(anti_elem)
-
-            else: 
-                # we have seen this mapping before and have to update the exception list loa
-                assert is_new.count(True) == 1
-                ind = is_new.index(True)
-                anti_elem = tracker[ind] # found the trackerelem antimap of the current mapping loc
-                anti_elem.item.extend_loa(item.loc.args) # extend exception list with current arguments
-                # this also extends tracker
 
     return tracker
     
@@ -433,6 +449,13 @@ def to_smt( exp: Exp) -> Integer | Boolean | String:
         both_int = isinstance(exp.left.type, ActInt) and isinstance(exp.right.type, ActInt)
         both_bytestr = isinstance(exp.left.type, ActByteStr) and isinstance(exp.right.type, ActByteStr)
         assert both_bool or both_int or both_bytestr, "left and right have to be of the same type"
+        # possibly a no update function constraint
+        if isinstance(exp.left, HistItem):
+            if isinstance(exp.left.loc, AntiMap):
+                assert isinstance(exp.right, HistItem)
+                assert isinstance(exp.right.loc, AntiMap)
+                return func_update(exp.left, exp.right)
+        
         return to_smt(exp.left) == to_smt(exp.right)
 
     elif isinstance(exp, Neq):
@@ -494,41 +517,73 @@ def to_smt( exp: Exp) -> Integer | Boolean | String:
         assert False 
      
 
-def apply_behaviour(store: SymStore,
+def apply_behaviour(tracker: Tracker,
                     history: List[str], 
                     contract_name: str, 
-                    contr: Constructor,
-                    behv: Behavior)         -> Tuple[SymStore, List[Boolean], List[Boolean], List[Boolean]]:
-
-    new_storage = dict()
-    for key, value in store.items():
-        new_storage[key] = gen_poststore(value, history[-1])
-    
+                    behv: Behavior)         -> Tuple[Tracker, List[Exp], List[Exp], List[Exp]]:
 
     prec = []
     updates = []
     case_cond = []
 
+    name = history[-1]
+
     for exp in behv.caseConditions:
-        case_cond.append(to_bool(store, new_storage, history, exp))
+        case_cond.append(to_hist(history, exp))
   
     for exp in behv.preConditions:
-        prec.append(to_bool(store, new_storage, history, exp))
+        prec.append(to_hist(history, exp))
 
     # ignore post cond and inv for now
 
-    # for exp in behv.postConditions:
-    #     constraints.append(to_bool(store, new_storage, history, exp))
-    # for exp in contr.invariants:
-    #     constraints.append(to_bool(store, new_storage, history, exp))
-
     for exp in behv.stateUpdates:
-        updates.append(to_bool(store, new_storage, history, exp))
+        updates.append(to_hist(history, exp))
+
+    new_tracker = update_tracker(tracker, updates, name)
    
-    no_update_constraints = no_update(store, new_storage, history, contract_name, behv.stateUpdates)
+    no_update_constraints = no_update(new_tracker, history, contract_name, updates)
 
-    return new_storage, prec, updates + no_update_constraints, case_cond
+    return new_tracker, prec, updates + no_update_constraints, case_cond
 
+
+def update_tracker(tracker: Tracker, updates: List[Exp], name: str) \
+    -> Tracker:
+
+    new_tracker = copy_update_tracker(tracker, name)
+
+    for update in updates:
+        assert isinstance(update, Eq)
+        assert isinstance(update.left, HistItem)
+        item = update.left
+        value = update.right
+        upstream = update.left.hist
+
+        is_new = True # only applies to mappingloc and is true iff the args are seen the first time
+        antielem_index = -1
+
+        for i in range(len(new_tracker)):
+            t_item = new_tracker[i].item
+            if item.is_equiv(t_item):
+                assert is_new
+                is_new = False
+                new_tracker[i] = TrackerElem(item, value, upstream)
+            if isinstance(item.loc, MappingLoc):
+                if isinstance(t_item.loc, AntiMap):
+                    if t_item.loc.loc.is_equiv(item.loc.loc):
+                        antielem_index = i
+        
+        if is_new:
+            assert isinstance(item.loc, MappingLoc)
+            assert antielem_index > -1
+            # add new mapping instance to tracker 
+            new_tracker.append(TrackerElem(item, value, upstream))
+            # adapt loa and upstream of corresponding antimap
+            anti_map = new_tracker[antielem_index].item.loc
+            assert isinstance(anti_map, AntiMap)
+            anti_map.extend_loa(item.loc.args)
+
+    return new_tracker
+    
 
 def generate_smt_storageloc(
                             history: List[str], 
@@ -620,120 +675,105 @@ def gen_poststore(pre: PreStore, name: str) -> PreStore:
     return post
 
 
-def no_update(prestore: SymStore, poststore: SymStore, history: List[str], main_contr: str, updates: List[Exp]) -> List[Boolean]:
+def no_update(tracker: Tracker, updates: List[Exp]) -> List[Exp]:
     """Identifies all SymVars from poststore that are not assigned a new value in the updates contraints.
     Returns a list of constraints that assert the not-updated poststore Symvars have the same value as the 
     respective prestore symvars.
     Only add the constraints for the main contract, others irrelevant
     """
 
-    noup_all = copy_symstore(prestore)
-    # delete redundant info - variables of other than main contract, the accessed ones will appear in a nested dict 
-    noup = noup_all[main_contr]
-    supp_fctargs: Dict[str, List[List[Integer | Boolean | String]]] = dict() 
-
+    noup_all = copy_tracker(tracker)
+    noup = [elem.item for elem in noup_all]
 
     for update in updates:
         assert isinstance(update, Eq)
         item = update.left
-        assert isinstance(item, StorageItem)
-        loc = item.loc
+        assert isinstance(item, HistItem)
 
-        # search loc in postStore
-        if isinstance(loc, VarLoc):
-            assert isinstance(noup, Dict)
-            del noup[loc.name]
-        elif isinstance(loc, MappingLoc):
-            keys: str = ""
-            new_loc = loc.loc
-            while isinstance(new_loc, ContractLoc):
-                # contractloc case:
-                if keys == "":
-                    keys = new_loc.field
-                else:
-                    keys = new_loc.field + "_" + keys
-                new_loc = new_loc.loc
-            #varloc case:
-            assert isinstance(new_loc, VarLoc)
-            keys = new_loc.name + "_" + keys
-            if keys in supp_fctargs:
-                supp_fctargs[keys].append([to_smt(prestore, poststore, history, elem) for elem in loc.args])
-            else:
-                supp_fctargs[keys] = [[to_smt(prestore, poststore, history, elem) for elem in loc.args]]
-        else: 
-            # contractloc case
-            key_list: List[str] = []
-            while isinstance(loc, ContractLoc):
-                key_list = [loc.field] +  key_list
-                loc = loc.loc
-            # reached varloc
-            assert isinstance(loc, VarLoc)
-            key_list = [loc.name] + key_list
-            store: SymVar | PreStore = noup #shallow copy on purpose
-            last_key = key_list[-1]
-            key_list = key_list[:-1]
-            for elem in key_list:
-                assert isinstance(store, Dict)
-                assert elem in store
-                store = store[elem]
+        # search loc in tracker
+        equi = False
+        for elem in noup:
+            if item.is_equiv(elem, tracker):
+                assert equi == False
+                equi = True
+                noup.remove(elem)
+        assert equi == True
 
-            assert isinstance(store, Dict)
-            del store[last_key] # through call by reference noup was shrinked as intended
-
-    assert isinstance(noup, Dict)
-    constraints = noup_cons(noup, poststore[main_contr], supp_fctargs, "")
+    constraints = noup_cons(noup)
 
     return constraints
 
 
-def noup_cons(prestore: PreStore,
-              poststore: PreStore, 
-              fsupp: Dict[str, List[List[Integer | Boolean | String]]],
-              path: str
-              )                                                    -> List[Boolean]:
+def noup_cons(noup: List[HistItem]) -> List[Exp]:
 
     constraints = []
-    for key, value in prestore.items():  
-        if path == "":
-            path = key
-        else:
-            path = path + "_" + key  
-
-        if isinstance(value, int) or z3.is_int(value) \
-            or isinstance(value, bool) or z3.is_bool(value):
-            assert not isinstance(poststore[key], Dict)
-            constraints.append(poststore[key] == value)
-        elif z3.is_string(value):
-            assert not isinstance(poststore[key], Dict)
-            constraints.append(poststore[key] == value)
-        elif isinstance(value, z3.FuncDeclRef):
-            postf = poststore[key]
-            assert isinstance(postf, z3.FuncDeclRef)
-            constraints.append(func_update(value, postf, fsupp.get(path, [])))
-        else:
-            postd = poststore[key]
-            assert isinstance(postd, Dict)
-            assert isinstance(value, Dict)
-            constraints.extend(noup_cons(value, postd, fsupp, path))
+    for elem in noup: 
+        cons = Eq(elem, HistItem(elem.loc, elem.hist[-1], elem.type) )
+        constraints.append(cons)
 
     return constraints
 
 
-def func_update(pref: z3.FuncDeclRef, postf: z3.FuncDeclRef, exc: List[List[Integer | Boolean | String]]) -> Boolean:
+def func_update(left: HistItem, right: HistItem) -> Boolean:
     """ construct forall quantified formula stating 'pref'=='postf' everywhere except on the 'exc' points"""
     
+    assert isinstance(left.loc, AntiMap)
+    assert isinstance(right.loc, AntiMap)
+
+    raw_exc = left.loc.loa
+    assert len(raw_exc) > 0
+    num_args = len(raw_exc[0])
+    assert len(num_args) > 0
+    assert all([num_args == len(elem) for elem in raw_exc]) #num args check
+    assert all([ all([elem[i].type == raw_exc[0][i].type for elem in raw_exc])  for i in num_args]) #type check
+
+    exc = []
+    for args in raw_exc:
+        exc.append([to_smt(elem) for elem in args])
+
+    # convert left and right to z3.FuncDeclRef
+    res_acttype = left.type
+    arg_acttypes = [exp.type for exp in raw_exc[0]]
+
+    # TO BE CONTINUED
+    arg_types = []
+    for elem in arg_acttypes:
+        if elem == ActBool():
+            arg_types.append(z3.BoolSort())
+        elif elem == ActInt():
+            arg_types.append(z3.IntSort())
+        elif elem == ActByteStr():
+            arg_types.append(z3.StringSort())
+        else:
+            assert False
+
+    if res_acttype == ActBool():
+        result = z3.BoolSort()
+    elif res_acttype == ActInt():
+        result = z3.IntSort()
+    elif res_acttype == ActByteStr():
+        result = z3.StringSort()
+    else:
+        assert False
+
+    name_left = to_name(left.loc.loc)
+    label_left = to_label(left.hist, name_left)
+    func_left = z3.Function(label_left, *arg_types, result)
+
+    name_right = to_name(right.loc.loc)
+    label_right = to_label(right.hist, name_right)
+    func_right = z3.Function(label_right, *arg_types, result)
+
     fresh_vars = []
-    assert pref.arity() == postf.arity(), "functions incompatible, different arities"
-    for i in range(pref.arity()):
-        assert pref.domain(i) == postf.domain(i), "functions incompatible, different domain types"
-        if pref.domain(i) == z3.IntSort():
+    for sort in arg_types:
+        if sort == z3.IntSort():
             fresh_vars.append(z3.FreshInt())
-        elif pref.domain(i) == z3.BoolSort():
+        elif sort == z3.BoolSort():
             fresh_vars.append(z3.FreshBool())
-        elif pref.domain(i) == z3.StringSort():
+        elif sort == z3.StringSort():
             fresh_vars.append(z3.FreshConst(z3.StringSort()))
         else:
-            assert False, "unsupported type" + pref.domain(i)
+            assert False, "unsupported type" + sort
 
     conjuncts = []
     for elem in exc:
@@ -746,13 +786,19 @@ def func_update(pref: z3.FuncDeclRef, postf: z3.FuncDeclRef, exc: List[List[Inte
         conjuncts.append(z3.And(*equ))
 
     lhs = z3.Not(z3.Or(*conjuncts))
-    rhs = postf(*fresh_vars) == pref(*fresh_vars)
+    rhs = func_left(*fresh_vars) == func_right(*fresh_vars)
 
     return z3.ForAll(fresh_vars, z3.Implies(lhs, rhs))
 
 
 
 # "little" helper functions
+
+def copy_tracker(tracker: Tracker) -> Tracker:
+    pass
+
+def copy_update_tracker(tracker: Tracker, name: str) -> Tracker:
+    pass
 
 def copy_symstore(store: SymStore) -> SymStore:
 
