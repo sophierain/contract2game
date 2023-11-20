@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from act_ast import *
 from parse_act import parse_act_json, parse_constraints_json
-from ast2smt import *
+from state_tree import *
 from sys import argv
 
 
@@ -33,7 +33,7 @@ act.to_cnf()
 
 act_trees = []
 for considered_contract in act.find_maincontract():
-       act_trees.append(contract2tree(considered_contract, act.store, extra_constraints))
+       act_trees.append(contract2tree(considered_contract, extra_constraints, act.store))
 
 
 for tree in act_trees:

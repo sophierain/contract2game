@@ -150,6 +150,11 @@ class ContractType(ValueType):
 class AbiType(ValueType, metaclass=ABCMeta):
     """base class for solidity abi types"""
 
+    @abstractmethod
+    def is_equiv(self, other: AbiType) -> bool:
+        pass
+
+
 @dataclass
 class AbiUIntType(AbiType):
     size: int
@@ -277,6 +282,14 @@ class Exp(metaclass=ABCMeta):
     """base class for expressions"""
     type: ActType
 
+    @abstractmethod
+    def is_equiv(self, other: Exp) -> bool:
+        pass
+
+    @abstractmethod
+    def copy_exp(self) -> Exp:
+        pass
+
 class ActType(metaclass=ABCMeta):
     """Base class for act types"""
 
@@ -309,6 +322,9 @@ class Lit(Exp):
             return False
         return True
 
+    def copy_exp(self)-> Exp:
+        return Lit(self.value, self.type)
+
 @dataclass
 class Var(Exp):
     name: str
@@ -322,6 +338,9 @@ class Var(Exp):
         if self.name != other.name:
             return False
         return True
+    
+    def copy_exp(self)-> Exp:
+        return Var(self.name, self.type)
 
 @dataclass
 class And(Exp):
@@ -340,6 +359,9 @@ class And(Exp):
         if not self.right.is_equiv(other.right):
             return False
         return True
+    
+    def copy_exp(self)-> Exp:
+        return And(self.left.copy_exp(), self.right.copy_exp(), self.type)
 
 @dataclass
 class Or(Exp):
@@ -359,6 +381,9 @@ class Or(Exp):
             return False
         return True
 
+    def copy_exp(self)-> Exp:
+        return Or(self.left.copy_exp(), self.right.copy_exp(), self.type)
+
 @dataclass
 class Not(Exp):
     """Negation of a boolean expression"""
@@ -373,6 +398,9 @@ class Not(Exp):
         if not self.value.is_equiv(other.value):
             return False
         return True
+
+    def copy_exp(self)-> Exp:
+        return Not(self.value.copy_exp(), self.type)
 
 @dataclass
 class Implies(Exp):
@@ -391,6 +419,9 @@ class Implies(Exp):
         if not self.right.is_equiv(other.right):
             return False
         return True
+
+    def copy_exp(self)-> Exp:
+        return Implies(self.left.copy_exp(), self.right.copy_exp(), self.type)
 
 @dataclass
 class ITE(Exp):
@@ -413,6 +444,10 @@ class ITE(Exp):
             return False
         return True
 
+    def copy_exp(self)-> Exp:
+        return ITE(self.condition.copy_exp(), self.left.copy_exp(), self.right.copy_exp(), self.type)
+
+
 @dataclass
 class Eq(Exp):
     left: Exp
@@ -430,6 +465,9 @@ class Eq(Exp):
             return False
         return True
 
+    def copy_exp(self)-> Exp:
+        return Eq(self.left.copy_exp(), self.right.copy_exp(), self.type)
+
 @dataclass
 class Neq(Exp):
     left: Exp
@@ -446,7 +484,10 @@ class Neq(Exp):
         if not self.right.is_equiv(other.right):
             return False
         return True
-             
+
+    def copy_exp(self)-> Exp:
+        return Neq(self.left.copy_exp(), self.right.copy_exp(), self.type) 
+
 @dataclass
 class InRange(Exp):
     expr: Exp
@@ -464,6 +505,9 @@ class InRange(Exp):
             return False
         return True
     
+    def copy_exp(self)-> Exp:
+        return InRange(self.expr.copy_exp(), self.abitype, self.type)
+
 
 # arithmetic
 @dataclass
@@ -484,6 +528,9 @@ class Add(Exp):
             return False
         return True
 
+    def copy_exp(self)-> Exp:
+        return Add(self.left.copy_exp(), self.right.copy_exp(), self.type)
+
 @dataclass 
 class Sub(Exp):
     """subtraction of two integer expressions"""
@@ -501,6 +548,10 @@ class Sub(Exp):
         if not self.right.is_equiv(other.right):
             return False
         return True
+
+    def copy_exp(self)-> Exp:
+        return Sub(self.left.copy_exp(), self.right.copy_exp(), self.type)
+
 
 @dataclass
 class Mul(Exp):
@@ -520,6 +571,9 @@ class Mul(Exp):
             return False
         return True
 
+    def copy_exp(self)-> Exp:
+        return Mul(self.left.copy_exp(), self.right.copy_exp(), self.type)
+
 @dataclass
 class Div(Exp):
     """division of two integer expressions"""
@@ -538,6 +592,9 @@ class Div(Exp):
             return False
         return True
 
+    def copy_exp(self)-> Exp:
+        return Div(self.left.copy_exp(), self.right.copy_exp(), self.type)
+
 @dataclass
 class Pow(Exp):
     """division of two integer expressions"""
@@ -555,6 +612,9 @@ class Pow(Exp):
         if not self.right.is_equiv(other.right):
             return False
         return True
+
+    def copy_exp(self)-> Exp:
+        return Pow(self.left.copy_exp(), self.right.copy_exp(), self.type)
 
 # relations 
 @dataclass
@@ -575,6 +635,9 @@ class Lt(Exp):
             return False
         return True
 
+    def copy_exp(self)-> Exp:
+        return Lt(self.left.copy_exp(), self.right.copy_exp(), self.type)
+
 @dataclass
 class Le(Exp):
     """less than or equal comparison of two integer expressions"""
@@ -592,6 +655,9 @@ class Le(Exp):
         if not self.right.is_equiv(other.right):
             return False
         return True
+
+    def copy_exp(self)-> Exp:
+        return Le(self.left.copy_exp(), self.right.copy_exp(), self.type)
 
 @dataclass
 class Gt(Exp):
@@ -611,6 +677,9 @@ class Gt(Exp):
             return False
         return True
 
+    def copy_exp(self)-> Exp:
+        return Gt(self.left.copy_exp(), self.right.copy_exp(), self.type)
+
 @dataclass
 class Ge(Exp):
     """greater than or equal comparison of two integer expressions"""
@@ -629,7 +698,9 @@ class Ge(Exp):
             return False
         return True
 
-    
+    def copy_exp(self)-> Exp:
+        return Ge(self.left.copy_exp(), self.right.copy_exp(), self.type)
+
 # --- environment Variables ---
 
 @dataclass  
@@ -646,6 +717,10 @@ class EnvVar(Exp):
         if self.name != other.name:
             return False
         return True
+
+    def copy_exp(self)-> Exp:
+        return EnvVar(self.name, self.type)
+
 
 @dataclass    
 class StorageItem(Exp): 
@@ -665,11 +740,22 @@ class StorageItem(Exp):
             return False
         return True
 
+    def copy_exp(self)-> Exp:
+        return StorageItem(self.loc.copy_loc(), self.time, self.type)
 
 # --- Storage Location ---
 
 class StorageLoc(metaclass=ABCMeta):
     """A reference to an item in storage"""
+
+    @abstractmethod
+    def is_equiv(self, other: StorageLoc) -> bool:
+        pass
+
+    @abstractmethod
+    def copy_loc(self) -> StorageLoc:
+        pass
+
 
 @dataclass
 class VarLoc(StorageLoc):
@@ -689,6 +775,9 @@ class VarLoc(StorageLoc):
         if self.name != other.name:
             return False
         return True
+
+    def copy_loc(self) -> StorageLoc:
+        return VarLoc(self.contract, self.name)
 
 @dataclass    
 class MappingLoc(StorageLoc):
@@ -711,6 +800,9 @@ class MappingLoc(StorageLoc):
             if not self.args[i].is_equiv(other.args[i]):
                 return False
         return True
+    
+    def copy_loc(self) -> StorageLoc:
+        return MappingLoc(self.loc.copy_loc(), [elem for elem in self.args])
 
 @dataclass    
 class ContractLoc(StorageLoc):
@@ -735,6 +827,8 @@ class ContractLoc(StorageLoc):
             return False
         return True
 
+    def copy_loc(self) -> StorageLoc:
+        return ContractLoc(self.loc.copy_loc(), self.contract, self.field)
 
 class Timing(metaclass=ABCMeta):
     """Is the storage varaible refering to the pre or post state"""
@@ -771,6 +865,13 @@ class HistItem(Exp):
             return False
         return True
 
+    def copy_exp(self) -> Exp:
+        loc = self.loc.copy_loc()
+        hist = [stri for stri in self.hist]
+        type = self.type
+
+        return HistItem(loc, hist, type)
+
 @dataclass
 class HistVar(Exp): 
     """Variable relative to its path"""
@@ -791,6 +892,9 @@ class HistVar(Exp):
         if self.name != other.name:
             return False
         return True
+
+    def copy_exp(self)-> Exp:
+        return HistVar(self.name, [elem for elem in self.hist], self.type)
 
 @dataclass
 class HistEnvVar(Exp): 
@@ -813,6 +917,8 @@ class HistEnvVar(Exp):
             return False
         return True
 
+    def copy_exp(self)-> Exp:
+        return HistEnvVar(self.name, [elem for elem in self.hist], self.type)
 
 # all cnf functions
 
@@ -856,7 +962,8 @@ def tocnf1(exp: Exp) -> Exp:
 def base_case(exp: Exp) -> Exp:
     
     if exp.type != ActBool() and isinstance(exp, ITE):
-        return ITE(translate2cnf(exp.condition), exp.left, exp.right, exp.type)
+        return ITE(translate2cnf(exp.condition), exp.left.copy_exp(),\
+                   exp.right.copy_exp(), exp.type)
     
     elif isinstance(exp, InRange): 
         if isinstance(InRange.abitype, AbiIntType):
@@ -873,7 +980,7 @@ def base_case(exp: Exp) -> Exp:
         return And(Le(min, exp.expr), Le(exp.expr, max))
 
     else:
-        return exp
+        return exp.copy_exp()
 
 def nnf(exp: Exp) -> Exp:
 
@@ -885,23 +992,23 @@ def nnf(exp: Exp) -> Exp:
         elif isinstance(exp.value, Not):
             return nnf(exp.value.value)
         elif isinstance(exp.value, Eq):
-            return Neq(exp.value.left, exp.value.right)
+            return Neq(exp.value.left.copy_exp(), exp.value.right.copy_exp())
         elif isinstance(exp.value, Neq):
-            return Eq(exp.value.left, exp.value.right)
+            return Eq(exp.value.left.copy_exp(), exp.value.right.copy_exp())
         else:
-            return exp
+            return exp.copy_exp()
 
     elif isinstance(exp, And):
         return And(nnf(exp.left), nnf(exp.right))
     elif isinstance(exp, Or):
         return Or(nnf(exp.left), nnf(exp.right))
     else:
-        return exp
+        return exp.copy_exp()
 
 def cnf(exp: Exp) -> Exp:
 
     if is_cnf(exp):
-        return exp
+        return exp.copy_exp()
     else:
         if isinstance(exp, And):
             return And(cnf(exp.left), cnf(exp.right))
@@ -954,7 +1061,7 @@ def to_cnf(exp: Exp) -> List[Exp]:
 
 def cnf2list(cnf: Exp) -> List[Exp]:
     if not isinstance(cnf, And):
-        return [cnf]
+        return [cnf.copy_exp()]
     else:
         return cnf2list(cnf.left) + cnf2list(cnf.right)
     

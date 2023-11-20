@@ -14,9 +14,7 @@ String = Union[str, z3.SeqRef]
 SymVar = Union[Integer, Boolean, String, z3.FuncDeclRef] 
 #is_string, is_int, is_bool are the type check calls
 
-Upstream = List[str]
-PreStore = Dict[str, Union[Tuple[SymVar, SymVar, List[Upstream]], 'PreStore']]
-SymStore = Dict[str, PreStore]       
+Upstream = List[str]      
 """
 x = z3.Int(<name>): z3.ArithRef                                         integer constant named <name>
 z = z3.Bool(<name>): z3.BoolRef   
@@ -28,6 +26,7 @@ y = z3.Function(<fct_name>, <z3 input sort(s)>, <z3 ouput sort>): z3.FuncDeclRef
 class AntiMap(StorageLoc):
     loc: StorageLoc
     loa: List[List[Exp]]
+    arg_types: List[ActType]
 
     def extend_loa(self, args: List[Exp]):
         assert args not in self.loa
@@ -46,13 +45,34 @@ class AntiMap(StorageLoc):
             for j in range(len(self.loa[i])):
                 if not self.loa[i][j].is_equiv(other.loa[i][j]):
                     return False
+        if len(self.arg_types) != len(other.arg_types):
+            return False
+        for i in range(len(self.arg_types)):
+            if self.arg_types[i] != other.arg_types[i]:
+                return False
         return True
+
+    def copy_loc(self) -> StorageLoc:
+        loa = []
+        for elem in self.loa:
+            loa.append([exp for exp in elem])
+
+        loc = self.loc.copy_loc()
+        arg_types = [type for type in self.arg_types]
+
+        return AntiMap(loc, loa, arg_types)
 
 @dataclass
 class TrackerElem:
     item: HistItem
     value: Exp
     upstream: List[str]
+
+    def update_value(self, new_value: Exp):
+        self.value = new_value
+
+    def update_upstream(self, new_upstream: List[str]):
+        self.upstream = new_upstream
 
 Tracker = List[TrackerElem]
 
@@ -66,25 +86,25 @@ class Tree:
     split_constraints: List[Exp] # are actually new case conditions
     children: Dict[str, 'Tree']
 
-    def __repr__(self, level = 0) -> str:  # to be adapted
+    def __repr__(self, level = 0) -> str:  # to be adapted, prettify printing of trackerelem and exp
         
         indent = "   "*level
         res = f"{indent}State: \n"
-        res = res + f"{indent}   Storage:\n"
-        for key, value in self.store.items():
-            res = res + f"      {indent}{key}: {value}\n"
+        res = res + f"{indent}   Tracker:\n"
+        for elem in self.tracker:
+            res = res + f"      {indent}{elem}\n"
         res = res + f"{indent}   Case:\n"
-        for elem in self.beh_case:
-            res = res + f"{indent}      {elem}\n"
+        for celem in self.beh_case:
+            res = res + f"{indent}      {celem}\n"
         res = res + f"{indent}   Preconditions:\n"
-        for elem in self.preconditions:
-            res = res + f"{indent}      {elem}\n"
+        for pelem in self.preconditions:
+            res = res + f"{indent}      {pelem}\n"
         res = res + f"{indent}   Updates:\n"
-        for elem in self.updates:
-            res = res + f"{indent}      {elem}\n"
+        for uelem in self.updates:
+            res = res + f"{indent}      {uelem}\n"
         res = res + f"{indent}   Split Constraints:\n"
-        for elem in self.split_constraints:
-            res = res + f"{indent}      {elem}\n"
+        for selem in self.split_constraints:
+            res = res + f"{indent}      {selem}\n"
         res = res + f"{indent}Children:\n"
         for ckey, cvalue in self.children.items():
             res = res + f"{indent}   {ckey}:\n{cvalue.__repr__(level + 1)}\n"
@@ -100,7 +120,7 @@ class Tree:
 
 # main functions
 
-def contract2tree(contract: Contract, extra_constraints: List[Exp]) -> Tree:
+def contract2tree(contract: Contract, extra_constraints: List[Exp], store: Storage) -> Tree:
     """ 
     contract: contract to be analyzed
     storage: storage dict of contract, contains all variables to be considered
@@ -110,13 +130,14 @@ def contract2tree(contract: Contract, extra_constraints: List[Exp]) -> Tree:
     
     """
 
-    init_tracker, init_prec, init_updates = init_state(contract.constructor, extra_constraints)
+    init_tracker, init_prec, init_updates = init_state(contract.constructor, extra_constraints, store)
     
-    return generate_tree([to_bool(exp) for exp in init_prec + init_updates], init_tracker, init_prec, init_updates, [], [],  \
+    return generate_tree([to_bool(exp) for exp in init_prec + init_updates], \
+                          init_tracker, init_prec, init_updates, [], [],  \
                           contract.name, contract.constructor, contract.behaviors)
 
 
-def init_state(ctor: Constructor, extraConstraints: List[Exp]) -> Tuple[Tracker, List[Exp], List[Exp]]:
+def init_state(ctor: Constructor, extraConstraints: List[Exp], store: Storage) -> Tuple[Tracker, List[Exp], List[Exp]]:
     """
     storage: storage dict of contract, contains all variables to be considered
     ctor: constructor of the contract, might be used later
@@ -132,56 +153,172 @@ def init_state(ctor: Constructor, extraConstraints: List[Exp]) -> Tuple[Tracker,
     for exp in ctor.initial_storage:
         updates.append(to_hist([], exp))
 
+    for exp in ctor.preConditions:
+        prec.append(to_hist([], exp))
+
     for exp in extraConstraints:
         prec.append(to_hist([], exp))
 
-    tracker = init_tracker(updates)
+    tracker = init_tracker(updates, store)
 
     return tracker, prec, updates
 
 
-def init_tracker(updates: List[Exp]) -> Tracker:
+def decl_tracker(store: Storage) -> Tracker:
+    """
+    storage: contract -> name -> Slottype (MappingType, ContractType, AbiType)
+    storageloc: 
+        varloc: contract 
+                name
+        contractloc: loc
+                     contract
+                     name
+        mappingloc: loc
+                    args
+
+    hence mappingtype  -> antimap
+          contracttype -> contractloc
+          abitype      -> varloc
+    """
+
     tracker: Tracker = []
 
-    for elem in updates:
-        assert isinstance(elem, Eq)
-        assert isinstance(elem.left, HistItem)
-        assert elem.left.hist == []
+    for contract, value in store.items():
+        for name, slot in value.items():
 
-        item = elem.left
+            loc_list = unroll_slot(VarLoc(contract, name), slot, store)
+            hist_list: List[Tuple[HistItem, Exp]] = []
+            for storloc, type in loc_list:
+                if type == ActInt():
+                    default = Lit(0, type)
+                elif type == ActBool():
+                    default = Lit(False, type)
+                elif type == ActByteStr():
+                    default = Lit("", type)
 
-        value = elem.right
+                hist_list.append((HistItem(storloc, [], type), default))
 
-        upstream = []
+            for histitem, defi in hist_list:
+                tracker.append(TrackerElem(histitem, defi, []))
+    
+    return tracker
 
-        telem = TrackerElem(item, value, upstream)
-        tracker.append(telem)
+                
+def unroll_slot(loc: StorageLoc, slot: SlotType, store: Storage) \
+                                -> List[Tuple[StorageLoc, ActType]]:
 
-        if isinstance(item.loc, MappingLoc): # checking if we have seen this mapping before
-            t_items = [elem.item for elem in tracker]
-            func = item.loc.loc
+    if isinstance(slot, ValueType):
+        if isinstance(slot, AbiType):
+            if isinstance(slot, AbiIntType):
+                type: ActType = ActInt()
+            elif isinstance(slot, AbiUIntType):
+                type = ActInt()
+            elif isinstance(slot, AbiAddressType):
+                type = ActInt()
+            elif isinstance(slot, AbiBoolType):
+                type = ActBool()
+            elif isinstance(slot, AbiStringType):
+                type =  ActByteStr()
+            else: 
+                assert False, "unsupported Abitype"
+            return [(loc, type)]
+        else:
+            assert isinstance(slot, ContractType)
+            result = []
+            for elem in store[slot.contract]:
+                cloc = ContractLoc(loc, slot.contract, elem)
+                cloc_list = unroll_slot(cloc, \
+                                        store[slot.contract][elem], store)
+                result.extend(cloc_list)
+            return result
+    else:
+        assert isinstance(slot, MappingType)
+        loa: List[List[Exp]] = []
+        
+        assert isinstance(slot.resultType, AbiType)
+        if isinstance(slot.resultType, AbiIntType):
+            rtype: ActType = ActInt()
+        elif isinstance(slot.resultType, AbiUIntType):
+            rtype = ActInt()
+        elif isinstance(slot.resultType, AbiAddressType):
+            rtype = ActInt()
+        elif isinstance(slot.resultType, AbiBoolType):
+            rtype = ActBool()
+        elif isinstance(slot.resultType, AbiStringType):
+            rtype =  ActByteStr()
+        else: 
+            assert False, "unsupported Abitype"
 
-            is_new = True
-            for i in len(t_items):
-                if isinstance(t_items[i].loc, AntiMap):
-                    if func.is_equiv(t_items[i].loc.loc, []): 
-                        # we have seen this mapping before and have to update the exception list loa
-                        assert is_new == True
-                        is_new = False
-                        anti_elem = tracker[i] # found the trackerelem antimap of the current mapping loc
-                        anti_elem.item.loc.extend_loa(item.loc.args) # extend exception list with current arguments
-                        # this also extends tracker
+        args_type: List[ActType] = []
+        for vtype in slot.argsType:
+            assert isinstance(vtype, AbiType)
+            if isinstance(vtype, AbiIntType):
+                atype: ActType = ActInt()
+            elif isinstance(vtype, AbiUIntType):
+                atype = ActInt()
+            elif isinstance(vtype, AbiAddressType):
+                atype = ActInt()
+            elif isinstance(vtype, AbiBoolType):
+                atype = ActBool()
+            elif isinstance(vtype, AbiStringType):
+                atype =  ActByteStr()
+            else: 
+                assert False, "unsupported Abitype"
+            args_type.append(atype)
 
-            if is_new: # seeing this mapping for the first time
-                antimap = AntiMap(func, [item.loc.args])
-                anti_hist = HistItem(antimap, item.hist, item.type)
-                if item.type == ActByteStr():
-                    anti_elem = TrackerElem(anti_hist, Lit("", ActByteStr()), upstream)
-                elif item.type == ActBool():
-                    anti_elem = TrackerElem(anti_hist, Lit(False, ActBool()), upstream)
-                else:
-                    anti_elem = TrackerElem(anti_hist, Lit(0, ActInt()), upstream)
-                tracker.append(anti_elem)
+        mloc = AntiMap(loc, loa, args_type)
+        return [(mloc, rtype)]
+
+
+def init_tracker(updates: List[Exp], store: Storage) -> Tracker:
+    tracker = decl_tracker(store)
+
+    for update in updates:
+        assert isinstance(update, Eq)
+        assert isinstance(update.left, HistItem)
+        assert update.left.hist == []
+        item = update.left
+        value = update.right.copy_exp()
+        upstream: List[str] = []
+
+        is_new = True 
+        # only applies to mappingloc and is true iff the args are seen the first time
+        antielem_index = -1
+
+        for i in range(len(tracker)):
+            t_item = tracker[i].item
+            if item.is_equiv(t_item):
+                assert is_new
+                is_new = False
+                tracker[i].update_value(value)
+            if isinstance(item.loc, MappingLoc):
+                if isinstance(t_item.loc, AntiMap):
+                    if t_item.loc.loc.is_equiv(item.loc.loc):
+                        antielem_index = i
+        
+        if is_new:
+            assert isinstance(item.loc, MappingLoc)
+
+            print(" init tracker antimaps:")
+            for elem in tracker:
+                poss_anti = elem.item.loc
+                if isinstance(poss_anti, AntiMap):
+                    print(poss_anti.loc)
+                    print(poss_anti.loa)
+            print("new item:")
+            print(item.loc.loc)
+            print(item.loc.args)
+            print(f"\n")
+
+            assert antielem_index > -1, f"antimap not initialized"
+            # add new mapping instance to tracker 
+            new_item = item.copy_exp()
+            assert isinstance(new_item, HistItem)
+            tracker.append(TrackerElem(new_item, value, upstream))
+            # adapt loa of corresponding antimap
+            anti_map = tracker[antielem_index].item.loc
+            assert isinstance(anti_map, AntiMap)
+            anti_map.extend_loa(item.loc.args)
 
     return tracker
     
@@ -198,25 +335,27 @@ def to_hist(hist: List[str], exp: Exp) -> Exp:
     
     if isinstance(exp, StorageItem): 
         if exp.time == Pre():
-            item_hist = hist[-1]
+            assert len(hist)>0, f"{exp}"
+            item_hist = [elem for elem in hist[:-1]]
         else: 
-            item_hist = hist
+            item_hist = [elem for elem in hist]
 
         if isinstance(exp.loc, MappingLoc):
-            exp_loc = MappingLoc(exp.loc.loc, [to_hist(hist, arg) for arg in exp.loc.args])
+            exp_locm = MappingLoc(exp.loc.loc.copy_loc(), [to_hist(hist, arg) for arg in exp.loc.args])
+            return HistItem(exp_locm, item_hist, exp.type)
         else:
-            exp_loc = exp.loc
+            exp_loc = exp.loc.copy_loc()
         
-        return HistItem(exp_loc, item_hist, exp.type)
+            return HistItem(exp_loc, item_hist, exp.type)
     
     elif  isinstance(exp, Var):
-        return HistVar(exp.name, hist, type)
+        return HistVar(exp.name, [elem for elem in hist], exp.type)
     
     elif  isinstance(exp, EnvVar):
-        return HistEnvVar(exp.name, hist, type)
+        return HistEnvVar(exp.name, [elem for elem in hist], exp.type)
     
     elif isinstance(exp, Lit):
-        return exp
+        return exp.copy_exp()
     elif isinstance(exp, And):
         return And(to_hist(hist, exp.left), to_hist(hist, exp.right), exp.type)
     elif isinstance(exp, Or):
@@ -224,7 +363,7 @@ def to_hist(hist: List[str], exp: Exp) -> Exp:
     elif isinstance(exp, Not):
         return Not(to_hist(hist, exp.value), exp.type)
     elif isinstance(exp, ITE):
-        return ITE(to_hist(exp.condition), to_hist(hist, exp.left), to_hist(hist, exp.right), exp.type)
+        return ITE(to_hist(hist, exp.condition), to_hist(hist, exp.left), to_hist(hist, exp.right), exp.type)
     elif isinstance(exp, Eq):
         return Eq(to_hist(hist, exp.left), to_hist(hist, exp.right), exp.type)
     elif isinstance(exp, Neq):
@@ -275,7 +414,7 @@ def generate_tree(
         if not child_name in history:
             # apply behaviour already returns the hist versions of vars and storage
             child_tracker, child_prec, child_updates, child_case = \
-                  apply_behaviour(tracker, history + [child_name], contract_name, contr, behv)
+                  apply_behaviour(tracker, history + [child_name], contract_name, behv)
             child_constraints = [to_bool(exp) for exp in child_prec + child_updates + child_case]
             reachable = children_solver.check(constraints + child_constraints)
             if reachable == z3.sat:
@@ -293,60 +432,6 @@ def generate_tree(
                 assert False
         
     return Tree(tracker, case_cond, prec, updates, [], children)
-
-
-# maybe obsolete
-def slottype2smt(contract: str, name: str, slot: SlotType, storage: Storage, init_values: List[Exp]) \
-                                                                                -> SymVar | PreStore :
-    '''needed to keep track of all smt declarations for the storage'''
-    var_name = to_storage_label(contract, name)
-    if isinstance(slot, AbiIntType):
-        return z3.Int(var_name)
-    elif isinstance(slot, AbiUIntType):
-        return z3.Int(var_name)
-    elif isinstance(slot, AbiAddressType):
-        return z3.Int(var_name)
-    elif isinstance(slot, AbiBoolType):
-        return z3.Bool(var_name)
-    elif isinstance(slot, AbiStringType):
-        return z3.String(var_name)
-
-    elif isinstance(slot, ContractType): 
-        assert slot.contract in storage 
-        #repeat stuff with storage[slot.contract] and add contract to the storage label
-        smt_store = dict()
-        for key, value in storage[slot.contract].items():
-            # key: str, value: SlotType
-            smt_store[key] = slottype2smt(to_storage_label(contract, name), key, value, storage)
-        return smt_store
-        
-    elif isinstance(slot, MappingType):
-            if isinstance(slot.resultType, AbiBoolType):
-                result = z3.BoolSort()
-            elif type(slot.resultType) in [AbiAddressType, AbiIntType, AbiUIntType]:
-                result = z3.IntSort()
-            elif type(slot.resultType) == AbiStringType:
-                result = z3.StringSort()
-            else:
-                # to be extended to other datatypes later
-                assert False, "unsupported result datatype: " + str(type(slot.resultType))
-
-            args = []
-            for elem in slot.argsType:
-                if isinstance(elem, AbiBoolType):
-                    args.append(z3.BoolSort())
-                elif type(elem) in [AbiAddressType, AbiIntType, AbiUIntType]:
-                    args.append(z3.IntSort())
-                elif type(elem) == AbiStringType:
-                    args.append(z3.StringSort())
-                else:
-                     # to be extended to other datatypes later
-                    assert False, "unsupported argument datatype: " + str(type(elem))
-
-            return z3.Function(to_storage_label(contract, name), *args, result)
-
-    else:
-        assert False, "unsupported abi datatype: " + str(type(slot))
 
 
 def to_bool(exp: Exp) -> Boolean:
@@ -506,7 +591,6 @@ def to_smt( exp: Exp) -> Integer | Boolean | String:
             assert isinstance(res, z3.ArithRef)
             return res
 
-    
     elif isinstance(exp, Pow):
         left = to_int(exp.left)
         right = to_int(exp.right)
@@ -541,7 +625,7 @@ def apply_behaviour(tracker: Tracker,
 
     new_tracker = update_tracker(tracker, updates, name)
    
-    no_update_constraints = no_update(new_tracker, history, contract_name, updates)
+    no_update_constraints = no_update(new_tracker, updates)
 
     return new_tracker, prec, updates + no_update_constraints, case_cond
 
@@ -555,10 +639,11 @@ def update_tracker(tracker: Tracker, updates: List[Exp], name: str) \
         assert isinstance(update, Eq)
         assert isinstance(update.left, HistItem)
         item = update.left
-        value = update.right
-        upstream = update.left.hist
+        value = update.right.copy_exp()
+        upstream = [stri for stri in update.left.hist]
 
-        is_new = True # only applies to mappingloc and is true iff the args are seen the first time
+        is_new = True 
+        # only applies to mappingloc and is true iff the args are seen the first time
         antielem_index = -1
 
         for i in range(len(new_tracker)):
@@ -566,7 +651,8 @@ def update_tracker(tracker: Tracker, updates: List[Exp], name: str) \
             if item.is_equiv(t_item):
                 assert is_new
                 is_new = False
-                new_tracker[i] = TrackerElem(item, value, upstream)
+                new_tracker[i].update_value(value)
+                new_tracker[i].update_upstream(upstream)
             if isinstance(item.loc, MappingLoc):
                 if isinstance(t_item.loc, AntiMap):
                     if t_item.loc.loc.is_equiv(item.loc.loc):
@@ -574,9 +660,23 @@ def update_tracker(tracker: Tracker, updates: List[Exp], name: str) \
         
         if is_new:
             assert isinstance(item.loc, MappingLoc)
-            assert antielem_index > -1
+
+            print("tracker antimaps:")
+            for elem in tracker:
+                poss_anti = elem.item.loc
+                if isinstance(poss_anti, AntiMap):
+                    print(poss_anti.loc)
+                    print(poss_anti.loa)
+            print("new item:")
+            print(item.loc.loc)
+            print(item.loc.args)
+            print(f"\n")
+
+            assert antielem_index > -1, f"antimap not initialized"
             # add new mapping instance to tracker 
-            new_tracker.append(TrackerElem(item, value, upstream))
+            new_item = item.copy_exp()
+            assert isinstance(new_item, HistItem)
+            new_tracker.append(TrackerElem(new_item, value, upstream))
             # adapt loa and upstream of corresponding antimap
             anti_map = new_tracker[antielem_index].item.loc
             assert isinstance(anti_map, AntiMap)
@@ -625,9 +725,9 @@ def generate_smt_storageloc(
         else:
             assert False
 
-        fun_name = to_name(loc)
+        fun_name = to_name(loc.loc)
         fun_name = to_label(history, fun_name)
-        func = z3.Function(fun_name, *smt_args, result)
+        func = z3.Function(fun_name, *arg_types, result)
         return func(*smt_args) 
     
     else:
@@ -641,38 +741,6 @@ def generate_smt_storageloc(
             return z3.Bool(var)
         else:
             return z3.String(var)
-
-
-# might be obsolete
-def gen_poststore(pre: PreStore, name: str) -> PreStore:
-    post = dict()
-
-    for key, value in pre.items():
-        if not isinstance(value, Dict):
-            # base case, we hit a SymVar:
-            if isinstance(value, z3.FuncDeclRef):
-                z3sorts = []
-                arity = value.arity()
-                for i in range(arity):
-                    z3sorts.append(value.domain(i)) 
-                z3sorts.append(value.range())
-                post[key] = z3.Function(name + "_" + value.name(), *z3sorts) 
-            
-            elif z3.is_int(value):
-                assert isinstance(value, z3.ArithRef)
-                post[key] = z3.Int(name + "_" + value.decl().name())
-            elif z3.is_bool(value):
-                assert isinstance(value, z3.BoolRef)
-                post[key] = z3.Bool(name + "_" + value.decl().name())
-            elif z3.is_string(value):
-                assert isinstance(value, z3.SeqRef)
-                post[key] = z3.String(name + "_" + value.decl().name())
-            else: 
-                assert False, "unsupported z3 type: " + str(type(value))
-        else:
-            post[key] = gen_poststore(value, name)
-
-    return post
 
 
 def no_update(tracker: Tracker, updates: List[Exp]) -> List[Exp]:
@@ -693,7 +761,7 @@ def no_update(tracker: Tracker, updates: List[Exp]) -> List[Exp]:
         # search loc in tracker
         equi = False
         for elem in noup:
-            if item.is_equiv(elem, tracker):
+            if item.is_equiv(elem):
                 assert equi == False
                 equi = True
                 noup.remove(elem)
@@ -706,9 +774,9 @@ def no_update(tracker: Tracker, updates: List[Exp]) -> List[Exp]:
 
 def noup_cons(noup: List[HistItem]) -> List[Exp]:
 
-    constraints = []
+    constraints: List[Exp] = []
     for elem in noup: 
-        cons = Eq(elem, HistItem(elem.loc, elem.hist[-1], elem.type) )
+        cons = Eq(elem.copy_exp(), HistItem(elem.loc.copy_loc(), [stri for stri in elem.hist[:-1]], elem.type) )
         constraints.append(cons)
 
     return constraints
@@ -721,21 +789,20 @@ def func_update(left: HistItem, right: HistItem) -> Boolean:
     assert isinstance(right.loc, AntiMap)
 
     raw_exc = left.loc.loa
-    assert len(raw_exc) > 0
-    num_args = len(raw_exc[0])
-    assert len(num_args) > 0
+    num_args = len(left.loc.arg_types)
+    arg_acttypes = left.loc.arg_types
+    assert num_args > 0
     assert all([num_args == len(elem) for elem in raw_exc]) #num args check
-    assert all([ all([elem[i].type == raw_exc[0][i].type for elem in raw_exc])  for i in num_args]) #type check
+    assert all([ all([elem[i].type == arg_acttypes[i] for elem in raw_exc]) 
+                for i in range(num_args)]) #type check
 
-    exc = []
+    exc: List[List[Integer | Boolean | String]] = []
     for args in raw_exc:
         exc.append([to_smt(elem) for elem in args])
 
     # convert left and right to z3.FuncDeclRef
     res_acttype = left.type
-    arg_acttypes = [exp.type for exp in raw_exc[0]]
 
-    # TO BE CONTINUED
     arg_types = []
     for elem in arg_acttypes:
         if elem == ActBool():
@@ -776,13 +843,13 @@ def func_update(left: HistItem, right: HistItem) -> Boolean:
             assert False, "unsupported type" + sort
 
     conjuncts = []
-    for elem in exc:
+    for lelem in exc:
         equ = []
         for i in range(len(fresh_vars)):
-            assert z3.is_int(elem[i]) == z3.is_int(fresh_vars[i]), "incompatible argument types"
-            assert z3.is_bool(elem[i]) == z3.is_bool(fresh_vars[i]), "incompatible argument types"
-            assert z3.is_string(elem[i]) == z3.is_string(fresh_vars[i]), "incompatible argument types"
-            equ.append(elem[i] == fresh_vars[i])
+            assert z3.is_int(lelem[i]) == z3.is_int(fresh_vars[i]), "incompatible argument types"
+            assert z3.is_bool(lelem[i]) == z3.is_bool(fresh_vars[i]), "incompatible argument types"
+            assert z3.is_string(lelem[i]) == z3.is_string(fresh_vars[i]), "incompatible argument types"
+            equ.append(lelem[i] == fresh_vars[i])
         conjuncts.append(z3.And(*equ))
 
     lhs = z3.Not(z3.Or(*conjuncts))
@@ -795,39 +862,39 @@ def func_update(left: HistItem, right: HistItem) -> Boolean:
 # "little" helper functions
 
 def copy_tracker(tracker: Tracker) -> Tracker:
-    pass
+    """
+    fresh instances of item and upstream as those can change in a tracker;
+    value is shallowly assigned 
+    """
+
+    new_tracker: Tracker = []
+
+    for elem in tracker:
+        upstream = [stri for stri in elem.upstream]
+        item = elem.item.copy_exp()
+        assert isinstance(item, HistItem)
+
+        new_tracker.append(TrackerElem(item, elem.value.copy_exp(), upstream))
+
+    return new_tracker
 
 def copy_update_tracker(tracker: Tracker, name: str) -> Tracker:
-    pass
+    """
+    fresh instances of item and upstream as those can change in a tracker;
+    value is shallowly assigned 
+    """
 
-def copy_symstore(store: SymStore) -> SymStore:
+    new_tracker: Tracker = []
 
-    scopy = dict()
-    for key, value in store.items():
-        scopy[key] = (copy_prestore(value)[0], copy_prestore(value)[1], copy_prestore(value)[2]) # to be double checked
+    for elem in tracker:
+        upstream = [stri for stri in elem.upstream]
+        item = elem.item.copy_exp()
+        assert isinstance(item, HistItem)
+        item.hist.append(name)
 
-    return scopy
+        new_tracker.append(TrackerElem(item, elem.value.copy_exp(), upstream))
 
-def copy_prestore(store: PreStore) -> PreStore:
-
-    scopy: PreStore = dict()
-    for key, value in store.items():
-        if isinstance(value, Dict):
-            scopy[key] = copy_prestore(value)
-        else:
-            scopy[key] = value
-    return scopy
-
-def walk_the_storage(store: PreStore, keys: List) -> SymVar:
-    maybe_symvar = store[keys[0]]
-    if len(keys) == 1:
-        assert not isinstance(maybe_symvar, Dict), "contradicting types" 
-        return maybe_symvar
-    else:
-        if isinstance(maybe_symvar, Dict):
-            return walk_the_storage(maybe_symvar, keys[1:])
-        else:
-            assert False, "incompatible PreStore and keys list"
+    return new_tracker
 
 def to_label(history: List[str], name: str) -> str:
     label = ""
@@ -839,15 +906,13 @@ def to_label(history: List[str], name: str) -> str:
     label = label + "::" + name
     return label
 
-def from_label(label: str) -> Tuple[List[str], str]:
-
-    res = label.split(";")
-    assert len(res) > 0
-    name = res[-1].split("::")
-    assert len(name) == 2
-    hist = res[:-1] + [name[0]]
-
-    return hist, name[1]
+def to_name(loc: StorageLoc) -> str:
+    assert not isinstance(loc, MappingLoc)
+    if isinstance(loc, VarLoc):
+        return to_storage_label(loc.contract, loc.name)
+    else: 
+        assert isinstance(loc, ContractLoc)
+        return to_storage_label(to_name(loc.loc), loc.field)
 
 def to_storage_label(contract: str, name: str) -> str:
     return contract + "." + name
@@ -941,7 +1006,6 @@ def to_node_smt(exp: Exp)-> str:
 
 def storageloc2node(loc: StorageLoc, time: Timing) -> str:
 
-
         if time == Pre():
             pref = "pre("
         else:
@@ -970,9 +1034,15 @@ def storageloc2node(loc: StorageLoc, time: Timing) -> str:
 
             return pref+ ", ".join(collect_list_of_keys) + ")"
 
-def to_name(pref: List[str], loc: StorageLoc) -> str:
-    assert not isinstance(loc, MappingLoc)
-    if isinstance(loc, VarLoc):
-        return to_storage_label(loc.contract, loc.name)
-    else: 
-        return to_storage_label(to_name(loc.loc), loc.field)
+def from_label(label: str) -> Tuple[List[str], str]:
+
+    res = label.split(";")
+    assert len(res) > 0
+    name = res[-1].split("::")
+    assert len(name) == 2
+    hist = res[:-1] + [name[0]]
+
+    return hist, name[1]
+
+
+

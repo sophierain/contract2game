@@ -430,7 +430,7 @@ def parse_initstore(initstore: Dict) ->  Exp:
         return Eq(
                 StorageItem(
                     parse_storageloc(initstore["location"]["item"]), 
-                    Pre(),
+                    Post(),
                     ActInt()
                 ), 
                 parse_exp(initstore["value"])
@@ -439,7 +439,7 @@ def parse_initstore(initstore: Dict) ->  Exp:
         return Eq(
                 StorageItem(
                     parse_storageloc(initstore["location"]["item"]), 
-                    Pre(),
+                    Post(),
                     ActBool()
                 ), 
                 parse_exp(initstore["value"])
@@ -448,7 +448,7 @@ def parse_initstore(initstore: Dict) ->  Exp:
         return Eq(
                 StorageItem(
                     parse_storageloc(initstore["location"]["item"]), 
-                    Pre(),
+                    Post(),
                     ActByteStr()
                 ), 
                 parse_exp(initstore["value"])
