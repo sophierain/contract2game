@@ -76,9 +76,23 @@ class TrackerElem:
 
 Tracker = List[TrackerElem]
 
+class Player(Exp):
+    name: str
+    address: int | None
+    constraints: List[Exp]
+    type: ActType = ActInt()
+
+    def copy_exp(self) -> Exp:
+        print("WARNING: players should not be copied!")
+        return self
+    
+    def is_equiv(self, other: Exp) -> bool:
+        return self == other
+
 @dataclass
 class Tree:
     """a node with possibly 0 children"""
+    player: Player | None
     tracker: Tracker
     beh_case: List[Exp]
     preconditions: List[Exp]
@@ -299,16 +313,16 @@ def init_tracker(updates: List[Exp], store: Storage) -> Tracker:
         if is_new:
             assert isinstance(item.loc, MappingLoc)
 
-            print(" init tracker antimaps:")
-            for elem in tracker:
-                poss_anti = elem.item.loc
-                if isinstance(poss_anti, AntiMap):
-                    print(poss_anti.loc)
-                    print(poss_anti.loa)
-            print("new item:")
-            print(item.loc.loc)
-            print(item.loc.args)
-            print(f"\n")
+            # print(" init tracker antimaps:")
+            # for elem in tracker:
+            #     poss_anti = elem.item.loc
+            #     if isinstance(poss_anti, AntiMap):
+            #         print(poss_anti.loc)
+            #         print(poss_anti.loa)
+            # print("new item:")
+            # print(item.loc.loc)
+            # print(item.loc.args)
+            # print(f"\n")
 
             assert antielem_index > -1, f"antimap not initialized"
             # add new mapping instance to tracker 
@@ -431,7 +445,7 @@ def generate_tree(
                 logging.info("solver returned 'unkown'")
                 assert False
         
-    return Tree(tracker, case_cond, prec, updates, [], children)
+    return Tree(None, tracker, case_cond, prec, updates, [], children)
 
 
 def to_bool(exp: Exp) -> Boolean:
@@ -661,16 +675,16 @@ def update_tracker(tracker: Tracker, updates: List[Exp], name: str) \
         if is_new:
             assert isinstance(item.loc, MappingLoc)
 
-            print("tracker antimaps:")
-            for elem in tracker:
-                poss_anti = elem.item.loc
-                if isinstance(poss_anti, AntiMap):
-                    print(poss_anti.loc)
-                    print(poss_anti.loa)
-            print("new item:")
-            print(item.loc.loc)
-            print(item.loc.args)
-            print(f"\n")
+            # print("tracker antimaps:")
+            # for elem in tracker:
+            #     poss_anti = elem.item.loc
+            #     if isinstance(poss_anti, AntiMap):
+            #         print(poss_anti.loc)
+            #         print(poss_anti.loa)
+            # print("new item:")
+            # print(item.loc.loc)
+            # print(item.loc.args)
+            # print(f"\n")
 
             assert antielem_index > -1, f"antimap not initialized"
             # add new mapping instance to tracker 
