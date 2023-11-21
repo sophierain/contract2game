@@ -95,7 +95,7 @@ In order to construct the game tree we need the following steps:
 
 3. keep running 2. until any of the following stop conditions is true:
     - the only behaviour that can be applied is ignore
-    - the history contains only ignore edges, and every player has played ignore once
+    - the history ends on a sequence of only ignore edges, and every player has played ignore once in this sequence
     - a max history length has been reached
 
 4. find sibling nodes that have no children and identical histories (i.e. leaves), delete all but

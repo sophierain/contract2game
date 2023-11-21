@@ -99,6 +99,7 @@ class Tree:
     updates: List[Exp]
     split_constraints: List[Exp] # are actually new case conditions
     children: Dict[str, 'Tree']
+    smt_constraints: List[Boolean]
 
     def __repr__(self, level = 0) -> str:  # to be adapted, prettify printing of trackerelem and exp
         
@@ -130,6 +131,22 @@ class Tree:
                 print(level*"   " + key)
                 value.structure(level + 1)
         return
+
+    def copy(self) -> 'Tree':
+        player = self.player
+        tracker = copy_tracker(self.tracker)
+        beh_case = [exp for exp in self.beh_case]
+        preconditions = [exp for exp in self.preconditions]
+        updates = [exp for exp in self.updates]
+        split_constraints = [exp for exp in self.split_constraints]
+        smt_constraints = [boo for boo in self.smt_constraints]
+        children: Dict[str, Tree] = dict()
+        for key, value in self.children.items():
+            children[key] = value.copy()
+
+        return Tree(player, tracker, beh_case, preconditions, updates, split_constraints, 
+                    children, smt_constraints)
+        
 
 
 # main functions
@@ -445,7 +462,7 @@ def generate_tree(
                 logging.info("solver returned 'unkown'")
                 assert False
         
-    return Tree(None, tracker, case_cond, prec, updates, [], children)
+    return Tree(None, tracker, case_cond, prec, updates, [], children, constraints)
 
 
 def to_bool(exp: Exp) -> Boolean:
@@ -467,6 +484,7 @@ def to_smt( exp: Exp) -> Integer | Boolean | String:
         Var
         EnvVar
         StorageItem
+        Player
 
         And
         Or
@@ -521,6 +539,9 @@ def to_smt( exp: Exp) -> Integer | Boolean | String:
         gen_storeloc = generate_smt_storageloc(exp.hist, exp.loc, exp.type) 
         assert not isinstance(gen_storeloc, z3.FuncDeclRef)
         return gen_storeloc
+    
+    elif isinstance(exp, Player):
+        return z3.Int(exp.name)
     
     # boolean expressions
 
