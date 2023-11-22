@@ -32,7 +32,7 @@ act = parse_act_json(obj)
 
 act.to_cnf()
 
-players = [Player("A", None, []), Player("B", None, [])]
+players = [Player("A", []), Player("B", [])]
 
 act_trees = []
 for considered_contract in act.find_maincontract():
@@ -40,7 +40,7 @@ for considered_contract in act.find_maincontract():
        act_trees.append(contract2pest(considered_contract, extra_constraints, act.store, players))
 
 
-# for tree in act_trees:
-#       tree.structure()
+for tree in act_trees:
+       tree.structure()
 
 

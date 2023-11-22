@@ -76,9 +76,9 @@ class TrackerElem:
 
 Tracker = List[TrackerElem]
 
+@dataclass
 class Player(Exp):
     name: str
-    address: int | None
     constraints: List[Exp]
     type: ActType = ActInt()
 
@@ -127,6 +127,8 @@ class Tree:
         return res
 
     def structure(self, level: int = 0):
+        if isinstance(self.player, Player):
+            print(level*"   " + self.player.name)
         for key, value in self.children.items():
                 print(level*"   " + key)
                 value.structure(level + 1)
