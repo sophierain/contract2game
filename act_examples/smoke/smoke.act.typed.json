@@ -14,8 +14,8 @@
             "args": [
               {
                 "abitype": {
-                  "type": "UInt", 
-                  "size": "256"
+                  "size": "256",
+                  "type": "UInt"
                 },
                 "id": "\"x\"",
                 "kind": "Declaration"
@@ -37,6 +37,10 @@
                       "type": "int"
                     },
                     {
+                      "abitype": {
+                        "size": "256",
+                        "type": "UInt"
+                      },
                       "type": "int",
                       "var": "x"
                     }
@@ -47,6 +51,10 @@
                 {
                   "args": [
                     {
+                      "abitype": {
+                        "size": "256",
+                        "type": "UInt"
+                      },
                       "type": "int",
                       "var": "x"
                     },
@@ -69,7 +77,7 @@
               "type": "int"
             },
             "kind": "TypedExpr",
-            "type": "AInteger"
+            "type": "int"
           },
           "stateUpdates": []
         }
