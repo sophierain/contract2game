@@ -1,0 +1,88 @@
+constructor of MC
+interface constructor(uint balA_, uint balB_)
+creates
+  mapping(address => uint) token := []
+
+  uint balA := balA_
+  uint balB := balB_
+  address a := 0
+  address b := 0
+  uint fee  := 0
+
+  uint splitA := 0
+  uint splitB := 0
+
+  address closer := 0
+  bool closed := false
+  bool canRespond := false
+  bool canRevoke := false
+
+behaviour closeUnilateral of MC
+interface closeUnilateral(uint valA, uint valB)
+
+iff
+  not closed
+  CALLER == a or CALLER == b
+  valA + valB == balA + balB
+
+storage
+
+  splitA => valA
+  splitB => valB
+  token[a] => valA
+  token[b] => valB
+
+  closed => true
+  closer => CALLER
+  canRevoke => balA == valA and balB == valB
+  canRespond => false
+
+behaviour submitRevocation of MC
+interface submitRevocation()
+
+iff
+
+  closed
+  canRevoke
+  CALLER == a or CALLER == b
+  CALLER =/= closer
+
+storage
+
+  token[closer] => token[closer] - (if closer == a then (splitA + fee) else (splitB + fee))
+  token[CALLER] => token[CALLER] + (if closer == a then splitA else splitB)
+  canRevoke => false
+
+behaviour closeCollaborative of MC
+interface closeCollaborative(uint valA, uint valB)
+
+iff
+  CALLER == a or CALLER == b
+  valA + valB == balA + balB
+  not closed
+
+storage
+
+  splitA => valA
+  splitB => valB
+  canRespond => true
+  closer => CALLER
+
+behaviour confirmClose of MC
+interface confirmClose()
+
+iff
+
+  closed
+  canRespond
+  CALLER == a or CALLER == b
+  CALLER =/= closer
+
+storage
+
+  token[a] => splitA
+  token[b] => splitB
+
+  canRespond => false
+  canRevoke => false
+
