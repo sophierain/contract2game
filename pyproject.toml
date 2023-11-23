@@ -7,6 +7,7 @@ name = "act2game"
 version = "0.0.1"
 readme = "README.md"
 requires-python = ">=3.8"
+dependencies = [ "z3-solver", "setuptools" ]
 
 [tool.setuptools]
 packages = ["contract2game", "contract2game.act_py", "contract2game.act2game"]

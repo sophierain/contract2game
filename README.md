@@ -16,12 +16,26 @@ The tool will then attempt to verify two properties:
 
 ## Hacking
 
+### pip / venv
+
 ```
-# bring up a dev shell with all required dependencies installed
+# bring up a development environment
+python -m venv ./.venv
+source .venv/bin/activate
+python -m pip install .
+
+# run the tool
+python -m contract2game <args>
+```
+
+### nix
+
+```
+# bring up a dev environment
 nix develop
 
 # run the tool
-python3 -m contract2game
+python -m contract2game <args>
 ```
 
 ## Internals
