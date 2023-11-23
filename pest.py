@@ -11,13 +11,15 @@ def contract2pest(contract: Contract, extra_constraints: List[Exp], \
     assert len(players) > 1, "at least 2 players required"
 
     print("state_tree successfully generated")
+    #print(state_tree)
 
     generate_pest([], state_tree, players, [], [])
 
     print("player-enhanced state tree with ignore successfully generated")
+    #print(state_tree.structure())
 
     prune_pest(state_tree)
-    print("pest successfully pruned")
+    #print("pest successfully pruned")
 
     return state_tree
 
@@ -58,6 +60,8 @@ def prune_pest(tree: Tree):
     find sibling nodes that have no children and identical histories (i.e. leaves), 
     delete all but
    one, and remove the player. """
+    print("prune:\n")
+    print(tree.structure())
     if len(tree.children.keys()) == 0:
         tree.player = None
 
@@ -78,7 +82,9 @@ def prune_pest(tree: Tree):
                     seen_actions.append(action)
                     tree.children[child].player = None
         
-        del tree.children[child]
+        for child in to_delete:
+            del tree.children[child]
+            print("pruned")
 
     else:
         # there should always be at least one behavior and ignore, thus >1 children
@@ -102,14 +108,16 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
     if len(state_tree.children.keys()) == 0:
         return
     
-    # last player many actions in history only contain ignore nodes
+    # last player-many actions in history only contain ignore nodes
     if len(hist) >= len(players):
         last_actions = hist[-len(players):]
         if all(elem == "ignore" for elem in last_actions):
+            state_tree.children = dict()
             return
 
     # max history length has been reached
     if len(hist) >= 10:
+        print("max length has been reached")
         return
 
     new_players = [elem for elem in players]
@@ -187,9 +195,13 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
             # constraints that in an ignore sequence no player twice
             not_ignored_players = [p for p in new_players]
             i = len(hist)-1
-            while hist[i] == "ignore" and i >= 0:
-                i = i-1
-                not_ignored_players.remove(player_hist[i])
+            if i >= 0:
+                while hist[i] == "ignore" and i >= 0:
+                    i = i-1
+                    not_ignored_players.remove(player_hist[i])
+
+            if state_tree.player in not_ignored_players:
+                not_ignored_players.remove(state_tree.player)
 
             for p in not_ignored_players:
                 child_name = child + "(" + p.name + ")"

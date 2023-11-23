@@ -143,13 +143,18 @@ def parse_behavior(behv: Dict) -> Behavior:
         else:
             assert "constant" in elem
 
+    if isinstance(behv["returns"], Dict):
+        ret_parsed = parse_exp(behv["returns"])
+    else:
+        ret_parsed = None
+
     return Behavior(
                     behv["name"],
                     parse_interface(behv["interface"]),
                     [parse_boolexp(elem) for elem in behv["case"] ],
                     [parse_boolexp(elem) for elem in behv["preConditions"] ],
                     [parse_boolexp(elem) for elem in behv["postConditions"] ],
-                    parse_exp(behv["returns"]),
+                    ret_parsed,
                     update
                     )
 
@@ -183,6 +188,8 @@ def parse_intexp(intexp: Dict) -> Exp:
 
 
 def parse_exp(exp: Dict) -> Exp:
+    # print(exp)
+    # print(type(exp))
     keys = exp.keys()
     if "symbol" in keys:
         #recursive case  
@@ -206,7 +213,12 @@ def parse_exp(exp: Dict) -> Exp:
             if exp["type"] == "int":
                 return Lit(int(exp["literal"]), ActInt())
             elif exp["type"] == "bool":
-                return Lit(bool(exp["literal"]), ActBool())
+                if exp["literal"] == "False":
+                    return Lit(False, ActBool())
+                elif exp["literal"] == "True":
+                    return Lit(True, ActBool())
+                else:
+                    assert False, "boolean neither False nor True but: " + exp["literal"]
             elif exp["type"] == "bytestring":
                 return Lit(str(exp["literal"]), ActByteStr())
             else:
@@ -224,15 +236,19 @@ def parse_exp(exp: Dict) -> Exp:
             else:
                 assert False, "unsupported variable type"
     
-        elif "envValue" in keys:
+        elif "envValue"  in keys or "ethEnv" in keys:
             # environment value; int, bool or bytestring
-            assert "type" in keys, "Missing 'type' key" 
+            assert "type" in keys, "Missing 'type' key"
+            if "envValue" in keys:
+                key = "envValue"
+            else:
+                key = "ethEnv"
             if exp["type"] == "int":
-                return EnvVar(exp["envValue"], ActInt())
+                return EnvVar(exp[key], ActInt())
             elif exp["type"] == "bool":
-                return EnvVar(exp["envValue"], ActBool())
+                return EnvVar(exp[key], ActBool())
             elif exp["type"] == "bytestring":
-                return EnvVar(exp["envValue"], ActByteStr())
+                return EnvVar(exp[key], ActByteStr())
             else:
                 assert False, "unsupported environment variable type"
 

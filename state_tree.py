@@ -127,7 +127,7 @@ class Tree:
         return res
 
     def structure(self, level: int = 0):
-        if isinstance(self.player, Player):
+        if self.player:
             print(level*"   " + self.player.name)
         for key, value in self.children.items():
                 print(level*"   " + key)
@@ -442,6 +442,7 @@ def generate_tree(
     
     children: Dict[str, Tree] = dict()
     for behv in behvs:
+        print(behv.name)
         child_name = behv.name + "__" + to_node_name(behv.caseConditions)
         # naive breaking condition: no 2 functions (behavior) can be called twice
         if not child_name in history:
@@ -449,7 +450,12 @@ def generate_tree(
             child_tracker, child_prec, child_updates, child_case = \
                   apply_behaviour(tracker, history + [child_name], contract_name, behv)
             child_constraints = [to_bool(exp) for exp in child_prec + child_updates + child_case]
+            # print(child_prec)
+            # print(child_updates)
+            # print(child_case)
+            # print(constraints)
             reachable = children_solver.check(constraints + child_constraints)
+            print(reachable)
             if reachable == z3.sat:
                 children[child_name] = generate_tree(constraints + child_constraints, 
                                                     child_tracker,

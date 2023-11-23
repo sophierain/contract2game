@@ -77,7 +77,7 @@ class Behavior:
     caseConditions: List[Exp]
     preConditions: List[Exp]
     postConditions: List[Exp]
-    returnValue: Exp 
+    returnValue: Exp | None
     stateUpdates: List[Exp] #equality constraints e.g. update
 
     def to_cnf(self):
