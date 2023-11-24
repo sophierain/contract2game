@@ -1,0 +1,57 @@
+{
+  "contracts": [
+    {
+      "behaviours": [],
+      "constructor": {
+        "contract": "C",
+        "initialStorage": [
+          {
+            "location": {
+              "item": {
+                "contract": "C",
+                "kind": "SVar",
+                "svar": "totalSupply"
+              },
+              "type": "int"
+            },
+            "value": {
+              "literal": "-1",
+              "type": "int"
+            }
+          }
+        ],
+        "interface": {
+          "args": [],
+          "id": "\"C\"",
+          "kind": "Interface"
+        },
+        "invariants": [],
+        "kind": "Constructor",
+        "postConditions": [],
+        "preConditions": []
+      },
+      "kind": "Contract"
+    }
+  ],
+  "kind": "Act",
+  "store": {
+    "kind": "Storages",
+    "storages": {
+      "C": {
+        "totalSupply": [
+          {
+            "kind": "ValueType",
+            "valueType": {
+              "abiType": {
+                "size": "256",
+                "type": "Int"
+              },
+              "kind": "AbiType"
+            }
+          },
+          0
+        ]
+      }
+    }
+  }
+}
