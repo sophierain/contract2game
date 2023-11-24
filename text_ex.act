@@ -1,0 +1,33 @@
+constructor of C
+interface constructor()
+iff
+  CALLVALUE == 0
+creates
+  address x := 0
+  uint v := 0
+  bool c := false
+  bool d := false
+
+behaviour f of C
+interface f(address a)
+
+iff
+  CALLVALUE == 0
+  not c
+
+storage
+  c => true
+  x => a
+
+behaviour g of C
+interface g()
+
+iff
+  c
+  not d
+  CALLER =/= x
+
+storage
+
+  d => true
+  v => 100

@@ -11,15 +11,16 @@ def contract2pest(contract: Contract, extra_constraints: List[Exp], \
     assert len(players) > 1, "at least 2 players required"
 
     print("state_tree successfully generated")
-    #print(state_tree)
+    # state_tree.structure()
 
     generate_pest([], state_tree, players, [], [])
 
     print("player-enhanced state tree with ignore successfully generated")
-    #print(state_tree.structure())
+    # state_tree.structure()
 
     prune_pest(state_tree)
-    #print("pest successfully pruned")
+    print("pest successfully pruned")
+    # state_tree.structure()
 
     return state_tree
 
@@ -60,8 +61,8 @@ def prune_pest(tree: Tree):
     find sibling nodes that have no children and identical histories (i.e. leaves), 
     delete all but
    one, and remove the player. """
-    print("prune:\n")
-    print(tree.structure())
+    # print("prune:\n")
+    # print(tree.structure())
     if len(tree.children.keys()) == 0:
         tree.player = None
 
@@ -100,6 +101,13 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
     #       state_tree = entire tree
     #       players = original order
     #       hist = []
+    # print("\n")
+    # state_tree.structure()
+    print(len(hist))
+    # print([p.name for p in player_hist])
+    # print(players[0].name)
+
+    
 
 
     # check breaking conditions:
@@ -122,6 +130,7 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
 
     new_players = [elem for elem in players]
     current_player = new_players.pop(0)
+    
     new_players.append(current_player)
 
     state_tree.player = current_player
@@ -160,7 +169,7 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
                     child_players = [elem for elem in new_players]
                     child_players.remove(p)
                     generate_pest(player_smt + [new_smt], to_add[-1][1],
-                                   [p] + child_players, hist + [child], player_hist + [p])
+                                   [p] + child_players, hist + [child], player_hist + [current_player])
     for child in to_delete:
         del state_tree.children[child]
     for child, child_pest in to_add:
@@ -168,6 +177,7 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
 
     # only extend ignore if there are other possible actions too. otherwise delete
     if not_ignore_child:
+        # print("there are other siblings than ignore")
         child = "ignore"
         child_tree = state_tree.children["ignore"]
 
@@ -189,27 +199,27 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
             assert False, "z3 returned unknown"
         
         else:
-            not_ignore_child = True
             del state_tree.children[child]
-
             # constraints that in an ignore sequence no player twice
             not_ignored_players = [p for p in new_players]
             i = len(hist)-1
             if i >= 0:
                 while hist[i] == "ignore" and i >= 0:
-                    i = i-1
                     not_ignored_players.remove(player_hist[i])
-
+                    i = i-1
             if state_tree.player in not_ignored_players:
-                not_ignored_players.remove(state_tree.player)
-
-            for p in not_ignored_players:
-                child_name = child + "(" + p.name + ")"
-                state_tree.children[child_name] = child_tree.copy()
-                child_players = [elem for elem in new_players]
-                child_players.remove(p)
-                generate_pest(player_smt + [new_smt], state_tree.children[child_name], \
-                              [p] + child_players, hist + [child], player_hist + [p])
+                # hence current player is still allowed to ignore
+                # otherwise current player has already ignored in this ignore sequence
+                # then no ignore is valid, has already been deleted, so nothing to do
+                for p in new_players:
+                    if p != current_player:
+                        child_name = child + "(" + p.name + ")"
+                        state_tree.children[child_name] = child_tree.copy()
+                        child_players = [elem for elem in new_players]
+                        child_players.remove(p)
+                        generate_pest(player_smt + [new_smt], state_tree.children[child_name], \
+                                    [p] + child_players, hist + [child], player_hist + [current_player])
 
     else:
+        # print("ignore was the only child")
         del state_tree.children["ignore"]
