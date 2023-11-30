@@ -100,6 +100,7 @@ class Tree:
     split_constraints: List[Exp] # are actually new case conditions
     children: Dict[str, 'Tree']
     smt_constraints: List[Boolean]
+    interface: List[Exp]
 
     def __repr__(self, level = 0) -> str:  # to be adapted, prettify printing of trackerelem and exp
         
@@ -155,9 +156,10 @@ class Tree:
         children: Dict[str, Tree] = dict()
         for key, value in self.children.items():
             children[key] = value.copy()
+        interface: List[Exp] = [var for var in self.interface]
 
         return Tree(player, tracker, beh_case, preconditions, updates, split_constraints, 
-                    children, smt_constraints)
+                    children, smt_constraints, interface)
         
 
 

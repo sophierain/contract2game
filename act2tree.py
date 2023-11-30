@@ -12,6 +12,7 @@ from parse_act import parse_act_json, parse_constraints_json
 from state_tree import *
 from pest import *
 from sys import argv
+from case_splitting import *
 
 
 
@@ -40,7 +41,12 @@ for considered_contract in act.find_maincontract():
        act_trees.append(contract2pest(considered_contract, extra_constraints, act.store, players))
 
 
+# print player enhanced state trees (their structure)
 for tree in act_trees:
        tree.structure()
+
+# apply case splitting algorithm to all trees
+for tree in act_trees:
+       case_split(tree)
 
 
