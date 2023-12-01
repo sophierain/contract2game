@@ -179,7 +179,7 @@ def contract2tree(contract: Contract, extra_constraints: List[Exp], store: Stora
     
     return generate_tree([to_bool(exp) for exp in init_prec + init_updates], \
                           init_tracker, init_prec, init_updates, [], [],  \
-                          contract.name, contract.constructor, contract.behaviors)
+                          contract.name, contract.behaviors, [])
 
 
 def init_state(ctor: Constructor, extraConstraints: List[Exp], store: Storage) -> Tuple[Tracker, List[Exp], List[Exp]]:
@@ -443,8 +443,8 @@ def generate_tree(
                   case_cond: List[Exp], 
                   history: List[str], 
                   contract_name: str, 
-                  contr: Constructor, 
-                  behvs: List[Behavior])             -> Tree:
+                  behvs: List[Behavior],
+                  interface: List[Exp])             -> Tree:
     """
     recursively extends the tree by applying all behaviors to all leaves 
     until no new reachable states are found
@@ -464,6 +464,7 @@ def generate_tree(
 
             reachable = children_solver.check(constraints + child_constraints)
             if reachable == z3.sat:
+                child_interface = gen_interface(behv.interface, history + [child_name])
                 children[child_name] = generate_tree(constraints + child_constraints, 
                                                     child_tracker,
                                                     child_prec,
@@ -471,13 +472,32 @@ def generate_tree(
                                                     child_case,
                                                     history + [child_name],
                                                     contract_name,
-                                                    contr, 
-                                                    behvs)
+                                                    behvs,
+                                                    child_interface)
             elif reachable == z3.unknown:
                 logging.info("solver returned 'unkown'")
                 assert False
         
-    return Tree(None, tracker, case_cond, prec, updates, [], children, constraints)
+    return Tree(None, tracker, case_cond, prec, updates, [], children, constraints, interface)
+
+def gen_interface(interface: Interface, hist: List[str]) -> List[Exp]:
+    exp_in: List[Exp] = []
+    for elem in interface.args:
+        name = elem.name
+        name.strip("\'")
+        if elem.type == AbiBoolType():
+            var = HistVar(name, hist, ActBool())
+        elif elem.type == AbiStringType():
+            var = HistVar(name, hist, ActByteStr())
+        elif isinstance(elem.type, AbiUIntType) or isinstance(elem.type, AbiIntType) \
+            or isinstance(elem.type, AbiAddressType):
+            var = HistVar(name, hist, ActInt())
+        else:
+            assert False, "unsupported abi type"
+
+        exp_in.append(var)
+    return exp_in
+
 
 
 def to_bool(exp: Exp) -> Boolean:

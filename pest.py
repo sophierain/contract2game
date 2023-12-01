@@ -22,6 +22,7 @@ def contract2pest(contract: Contract, extra_constraints: List[Exp], \
     print("pest successfully pruned")
     # state_tree.structure()
 
+
     return state_tree
 
 
@@ -42,18 +43,121 @@ def add_ignore(tree: Tree, hist: List[str]):
         children[key].preconditions.append(ignore_constr)
 
     tracker = copy_update_tracker(tree.tracker, "ignore")
-    beh_case = [exp for exp in tree.beh_case]
-    preconditions = [exp for exp in tree.preconditions]
-    updates = [exp for exp in tree.updates]
-    split_constraints = [exp for exp in tree.split_constraints]
+    beh_case = [align_hist(exp) for exp in tree.beh_case]
+    preconditions = [align_hist(exp) for exp in tree.preconditions]
+    updates = [align_hist(exp) for exp in tree.updates]
+    split_constraints = [align_hist(exp) for exp in tree.split_constraints]
+    # probably also off by 1
     smt_constraints = [boo for boo in tree.smt_constraints]
 
 
     assert "ignore" not in tree.children.keys()
     tree.children["ignore"]= Tree(None, tracker, beh_case, preconditions, updates, 
-                                  split_constraints, children, smt_constraints)
+                                  split_constraints, children, smt_constraints, [])
     
     return
+
+
+def align_hist(exp: Exp) -> Exp:
+
+    if isinstance(exp, HistItem):
+        # take care of loc for mappings
+        if isinstance(exp.loc, MappingLoc):
+            loc = MappingLoc(exp.loc.loc.copy_loc(), [align_hist(elem) for elem in exp.loc.args])
+        else:
+            loc = exp.loc.copy_loc()
+        return HistItem(loc, ["ignore"] + exp.hist, exp.type)
+
+    elif isinstance(exp, Lit):
+        return exp.copy_exp()
+    
+    elif isinstance(exp, HistVar):
+        return HistVar(exp.name, ["ignore"] + exp.hist, exp.type)
+    
+    elif isinstance(exp, HistEnvVar):
+        return HistEnvVar(exp.name, ["ignore"] + exp.hist, exp.type)
+    
+    elif isinstance(exp, Player):
+        return exp
+
+    elif isinstance(exp, And):
+        left = align_hist(exp.left)
+        right = align_hist(exp.right)
+        return And(left, right)
+    
+    elif isinstance(exp, Or):
+        left = align_hist(exp.left)
+        right = align_hist(exp.right)
+        return Or(left, right) 
+
+    elif isinstance(exp, Not):
+        value = align_hist(exp.value)
+        return Not(value)
+    
+    elif isinstance(exp, ITE):
+        condition = align_hist(exp.condition)
+        left = align_hist(exp.left)
+        right = align_hist(exp.right)
+        return ITE(condition, left, right, exp.type)
+
+    elif isinstance(exp, Eq):
+        left = align_hist(exp.left)
+        right = align_hist(exp.right)
+        return Eq(left, right) 
+    
+    elif isinstance(exp, Neq):
+        left = align_hist(exp.left)
+        right = align_hist(exp.right)
+        return Neq(left, right) 
+    
+    elif isinstance(exp, Add):
+        left = align_hist(exp.left)
+        right = align_hist(exp.right)
+        return Add(left, right) 
+
+    elif isinstance(exp, Sub):
+        left = align_hist(exp.left)
+        right = align_hist(exp.right)
+        return Sub(left, right) 
+    
+    elif isinstance(exp, Mul):
+        left = align_hist(exp.left)
+        right = align_hist(exp.right)
+        return Mul(left, right) 
+    
+    elif isinstance(exp, Div):
+        left = align_hist(exp.left)
+        right = align_hist(exp.right)
+        return Div(left, right) 
+    
+    elif isinstance(exp, Pow):
+        left = align_hist(exp.left)
+        right = align_hist(exp.right)
+        return Pow(left, right) 
+    
+    elif isinstance(exp, Lt):
+        left = align_hist(exp.left)
+        right = align_hist(exp.right)
+        return Lt(left, right) 
+    
+    elif isinstance(exp, Le):
+        left = align_hist(exp.left)
+        right = align_hist(exp.right)
+        return Le(left, right) 
+    
+    elif isinstance(exp, Gt):
+        left = align_hist(exp.left)
+        right = align_hist(exp.right)
+        return Gt(left, right) 
+    
+    elif isinstance(exp, Ge):
+        left = align_hist(exp.left)
+        right = align_hist(exp.right)
+        return Ge(left, right) 
+
+    else: 
+        # shouldn't see any implies nor inrange at this point (CNF)
+        assert False, "unexpected Exp type"
 
 
 def prune_pest(tree: Tree):
@@ -85,7 +189,7 @@ def prune_pest(tree: Tree):
         
         for child in to_delete:
             del tree.children[child]
-            print("pruned")
+            # print("pruned")
 
     else:
         # there should always be at least one behavior and ignore, thus >1 children
@@ -103,7 +207,6 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
     #       hist = []
     # print("\n")
     # state_tree.structure()
-    print(len(hist))
     # print([p.name for p in player_hist])
     # print(players[0].name)
 
@@ -223,3 +326,5 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
     else:
         # print("ignore was the only child")
         del state_tree.children["ignore"]
+
+
