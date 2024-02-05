@@ -949,10 +949,6 @@ def copy_tracker(tracker: Tracker) -> Tracker:
     return new_tracker
 
 def copy_update_tracker(tracker: Tracker, name: str) -> Tracker:
-    """
-    fresh instances of item and upstream as those can change in a tracker;
-    value is shallowly assigned 
-    """
 
     new_tracker: Tracker = []
 

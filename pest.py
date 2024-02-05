@@ -32,21 +32,26 @@ def add_ignore(tree: Tree, hist: List[str]):
 
     add ignore branch and children are the same as siblings
     """
+    print("add ignore")
     #build a new tree
     # add the not the same player twice constraint and add it as new subtree
     children: Dict[str, Tree] = dict()
     for key, value in tree.children.items():
-        children[key] = value.copy()
+        children[key] = align_children(value, hist)
         ignore_caller = HistEnvVar("Caller", hist + ["ignore"], ActInt())
+        # print(ignore_caller)
         child_caller = HistEnvVar("Caller", hist + ["ignore", key], ActInt())
+        # print(child_caller)
         ignore_constr = Neq(ignore_caller, child_caller)
         children[key].preconditions.append(ignore_constr)
 
-    tracker = copy_update_tracker(tree.tracker, "ignore")
-    beh_case = [align_hist(exp) for exp in tree.beh_case]
-    preconditions = [align_hist(exp) for exp in tree.preconditions]
-    updates = [align_hist(exp) for exp in tree.updates]
-    split_constraints = [align_hist(exp) for exp in tree.split_constraints]
+    # print("hist that copy update tracker is called with")
+    # print(hist)
+    tracker = align_tracker(tree.tracker, "ignore", hist)
+    beh_case = [align_hist(exp, hist) for exp in tree.beh_case]
+    preconditions = [align_hist(exp, hist) for exp in tree.preconditions]
+    updates = [align_hist(exp, hist) for exp in tree.updates]
+    split_constraints = [align_hist(exp, hist) for exp in tree.split_constraints]
     # probably also off by 1
     smt_constraints = [boo for boo in tree.smt_constraints]
 
@@ -58,106 +63,200 @@ def add_ignore(tree: Tree, hist: List[str]):
     return
 
 
-def align_hist(exp: Exp) -> Exp:
+def align_children(tree: Tree, hist: List[str]) -> Tree:
+
+    tracker = align_tracker(tree.tracker, "ignore", hist) # adapt copyUpdateTracker
+    beh_case = [align_hist(exp, hist) for exp in tree.beh_case]
+    preconditions = [align_hist(exp, hist) for exp in tree.preconditions]
+    updates = [align_hist(exp, hist) for exp in tree.updates]
+    split_constraints = [align_hist(exp, hist) for exp in tree.split_constraints]
+    # probably also off by 1, not to be adapted?
+    smt_constraints = [boo for boo in tree.smt_constraints]
+    interface = [align_hist(exp, hist) for exp in tree.interface]
+
+    children: Dict[str, Tree] = dict()
+    for key, value in tree.children.items():
+        children[key] = align_children(value, hist)
+
+    return Tree(None, tracker, beh_case, preconditions, updates, 
+                                  split_constraints, children, smt_constraints, interface)
+
+
+def align_hist(exp: Exp, hist: List[str]) -> Exp:
+    """ 
+    if exp.hist shorter (subhist) than hist, do nothing
+    elif they are the same --> add ignore
+    elif exp.hist is super hist of hist, then do hist + ignore + rest of exp.hist 
+    """
 
     if isinstance(exp, HistItem):
         # take care of loc for mappings
         if isinstance(exp.loc, MappingLoc):
-            loc = MappingLoc(exp.loc.loc.copy_loc(), [align_hist(elem) for elem in exp.loc.args])
+            loc = MappingLoc(exp.loc.loc.copy_loc(), [align_hist(elem, hist) for elem in exp.loc.args])
         else:
             loc = exp.loc.copy_loc()
-        return HistItem(loc, ["ignore"] + exp.hist, exp.type)
+
+        if len(hist) == len(exp.hist):
+            for i in range(len(hist)):
+                assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
+            new_hist = hist + ["ignore"]
+        elif len(hist) > len(exp.hist):
+            for i in range(len(exp.hist)):
+                assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
+            new_hist = exp.hist
+        else:
+            for i in range(len(hist)):
+                assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
+            new_hist = hist + ["ignore"] + exp.hist[len(hist):]
+
+        return HistItem(loc, new_hist, exp.type)
 
     elif isinstance(exp, Lit):
         return exp.copy_exp()
     
     elif isinstance(exp, HistVar):
-        return HistVar(exp.name, ["ignore"] + exp.hist, exp.type)
+
+        if len(hist) == len(exp.hist):
+            for i in range(len(hist)):
+                assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
+            new_hist = hist + ["ignore"]
+        elif len(hist) > len(exp.hist):
+            for i in range(len(exp.hist)):
+                assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
+            new_hist = exp.hist
+        else:
+            for i in range(len(hist)):
+                assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
+            new_hist = hist + ["ignore"] + exp.hist[len(hist):]
+        return HistVar(exp.name, new_hist, exp.type)
     
     elif isinstance(exp, HistEnvVar):
-        return HistEnvVar(exp.name, ["ignore"] + exp.hist, exp.type)
+
+        if len(hist) == len(exp.hist):
+            for i in range(len(hist)):
+                assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
+            new_hist = hist + ["ignore"]
+        elif len(hist) > len(exp.hist):
+            for i in range(len(exp.hist)):
+                assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
+            new_hist = exp.hist
+        else:
+            for i in range(len(hist)):
+                assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
+            new_hist = hist + ["ignore"] + exp.hist[len(hist):]
+        return HistEnvVar(exp.name, new_hist, exp.type)
     
     elif isinstance(exp, Player):
         return exp
 
     elif isinstance(exp, And):
-        left = align_hist(exp.left)
-        right = align_hist(exp.right)
+        left = align_hist(exp.left, hist)
+        right = align_hist(exp.right, hist)
         return And(left, right)
     
     elif isinstance(exp, Or):
-        left = align_hist(exp.left)
-        right = align_hist(exp.right)
+        left = align_hist(exp.left, hist)
+        right = align_hist(exp.right, hist)
         return Or(left, right) 
 
     elif isinstance(exp, Not):
-        value = align_hist(exp.value)
+        value = align_hist(exp.value, hist)
         return Not(value)
     
     elif isinstance(exp, ITE):
-        condition = align_hist(exp.condition)
-        left = align_hist(exp.left)
-        right = align_hist(exp.right)
+        condition = align_hist(exp.condition, hist)
+        left = align_hist(exp.left, hist)
+        right = align_hist(exp.right, hist)
         return ITE(condition, left, right, exp.type)
 
     elif isinstance(exp, Eq):
-        left = align_hist(exp.left)
-        right = align_hist(exp.right)
+        left = align_hist(exp.left, hist)
+        right = align_hist(exp.right, hist)
         return Eq(left, right) 
     
     elif isinstance(exp, Neq):
-        left = align_hist(exp.left)
-        right = align_hist(exp.right)
+        left = align_hist(exp.left, hist)
+        right = align_hist(exp.right, hist)
         return Neq(left, right) 
     
     elif isinstance(exp, Add):
-        left = align_hist(exp.left)
-        right = align_hist(exp.right)
+        left = align_hist(exp.left, hist)
+        right = align_hist(exp.right, hist)
         return Add(left, right) 
 
     elif isinstance(exp, Sub):
-        left = align_hist(exp.left)
-        right = align_hist(exp.right)
+        left = align_hist(exp.left, hist)
+        right = align_hist(exp.right, hist)
         return Sub(left, right) 
     
     elif isinstance(exp, Mul):
-        left = align_hist(exp.left)
-        right = align_hist(exp.right)
+        left = align_hist(exp.left, hist)
+        right = align_hist(exp.right, hist)
         return Mul(left, right) 
     
     elif isinstance(exp, Div):
-        left = align_hist(exp.left)
-        right = align_hist(exp.right)
+        left = align_hist(exp.left, hist)
+        right = align_hist(exp.right, hist)
         return Div(left, right) 
     
     elif isinstance(exp, Pow):
-        left = align_hist(exp.left)
-        right = align_hist(exp.right)
+        left = align_hist(exp.left, hist)
+        right = align_hist(exp.right, hist)
         return Pow(left, right) 
     
     elif isinstance(exp, Lt):
-        left = align_hist(exp.left)
-        right = align_hist(exp.right)
+        left = align_hist(exp.left, hist)
+        right = align_hist(exp.right, hist)
         return Lt(left, right) 
     
     elif isinstance(exp, Le):
-        left = align_hist(exp.left)
-        right = align_hist(exp.right)
+        left = align_hist(exp.left, hist)
+        right = align_hist(exp.right, hist)
         return Le(left, right) 
     
     elif isinstance(exp, Gt):
-        left = align_hist(exp.left)
-        right = align_hist(exp.right)
+        left = align_hist(exp.left, hist)
+        right = align_hist(exp.right, hist)
         return Gt(left, right) 
     
     elif isinstance(exp, Ge):
-        left = align_hist(exp.left)
-        right = align_hist(exp.right)
+        left = align_hist(exp.left, hist)
+        right = align_hist(exp.right, hist)
         return Ge(left, right) 
 
     else: 
         # shouldn't see any implies nor inrange at this point (CNF)
         assert False, "unexpected Exp type"
+
+
+def align_tracker(tracker: Tracker, name: str, hist: List[str]) -> Tracker:
+    """
+    fresh instances of item and upstream as those can change in a tracker;
+    value is shallowly assigned 
+    """
+
+    new_tracker: Tracker = []
+
+    for elem in tracker:
+        if len(hist) == len(elem.upstream):
+            for i in range(len(hist)):
+                assert hist[i] == elem.upstream[i], f"{hist} vs {elem.upstream}"
+            upstream = hist + [name]
+        elif len(hist) > len(elem.upstream):
+            for i in range(len(elem.upstream)):
+                assert hist[i] == elem.upstream[i], f"{hist} vs {elem.upstream}"
+            upstream = elem.upstream
+        else:
+            for i in range(len(hist)):
+                assert hist[i] == elem.upstream[i], f"{hist} vs {elem.upstream}"
+            upstream = hist + [name] + elem.upstream[len(hist):]
+        item = align_hist(elem.item, hist)
+        assert isinstance(item, HistItem)
+        value = align_hist(elem.value, hist)
+
+        new_tracker.append(TrackerElem(item, value, upstream))
+
+    return new_tracker
 
 
 def prune_pest(tree: Tree):
@@ -291,6 +390,7 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
         child_tree.smt_constraints.extend(player_smt + [new_smt])
 
         reachable = z3.Solver().check(child_tree.smt_constraints)
+        # print(child_tree.preconditions)
 
         #check satisfiability
         # if unsat remove tree

@@ -8,7 +8,8 @@ def is_dependent(constraints: List[Exp], tracker: Tracker, interface: List[Exp],
     tr_cons: List[Exp] = []
     forall_vars: List[Exp] = []
     for elem in constraints:
-        print("banana")
+        # print("banana")
+        # print(elem)
         cons, vars = apply_tracker(elem, tree, hist)
         tr_cons.append(cons)
         forall_vars.extend(vars)
@@ -34,7 +35,7 @@ def is_dependent(constraints: List[Exp], tracker: Tracker, interface: List[Exp],
 
     solver = z3.Solver()
     dependent = solver.check(exists)
-    print(exists)
+    # print(exists)
 
     if dependent == z3.sat:
         print("sat")
@@ -103,12 +104,14 @@ def apply_tracker(exp: Exp, tree: Tree, history: List[str]) -> Tuple[Exp, List[E
     and the list of variables that occur in those value terms
     """
     # all except storage vars remain the same
-    print(exp)
-    print("orange")
+    # print(exp)
+    # print("orange")
     if isinstance(exp, HistItem):
-        print(history)
-        print(exp.hist)
+        # print(history)
+        # print(exp.hist)
+        # print(history[:len(exp.hist)])
         tracker = walk_the_tree(tree, history[:len(exp.hist)]).tracker
+        # print(tracker)
         for tracker_elem in tracker:
              if exp.is_equiv(tracker_elem.item):
                 return apply_tracker(tracker_elem.value, tree, history)

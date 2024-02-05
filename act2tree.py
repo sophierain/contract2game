@@ -42,12 +42,14 @@ for considered_contract in act.find_maincontract():
 
 
 # print player enhanced state trees (their structure)
-for tree in act_trees:
-       tree.structure()
-       print("\n")
+# for tree in act_trees:
+#        tree.structure()
+#        print("\n")
 
 # apply case splitting algorithm to all trees
 for tree in act_trees:
        case_split(tree, [], tree)
+
+
 
 
