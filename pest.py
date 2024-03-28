@@ -48,12 +48,19 @@ def add_ignore(tree: Tree, hist: List[str]):
     # print("hist that copy update tracker is called with")
     # print(hist)
     tracker = align_tracker(tree.tracker, "ignore", hist)
-    beh_case = [align_hist(exp, hist) for exp in tree.beh_case]
-    preconditions = [align_hist(exp, hist) for exp in tree.preconditions]
-    updates = [align_hist(exp, hist) for exp in tree.updates]
-    split_constraints = [align_hist(exp, hist) for exp in tree.split_constraints]
+
+    beh_case = []
+    preconditions = []
+    updates = []
+    split_constraints = []
+    smt_constraints = []
+
+    # beh_case = [align_hist(exp, hist) for exp in tree.beh_case]
+    # preconditions = [align_hist(exp, hist) for exp in tree.preconditions]
+    # updates = [align_hist(exp, hist) for exp in tree.updates]
+    # split_constraints = [align_hist(exp, hist) for exp in tree.split_constraints]
     # probably also off by 1
-    smt_constraints = [boo for boo in tree.smt_constraints]
+    # smt_constraints = [boo for boo in tree.smt_constraints]
 
 
     assert "ignore" not in tree.children.keys()
@@ -346,7 +353,7 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
         
         if child != "ignore":
             player_const = Eq(current_player, HistEnvVar("Caller", hist+[child], ActInt()))
-            child_tree.preconditions.append(player_const)
+            child_tree.updates.append(player_const)
 
             new_smt = to_bool(player_const)
             child_tree.smt_constraints.extend(player_smt + [new_smt])
@@ -384,7 +391,7 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
         child_tree = state_tree.children["ignore"]
 
         player_const = Eq(current_player, HistEnvVar("Caller", hist+[child], ActInt()))
-        child_tree.preconditions.append(player_const)
+        child_tree.updates.append(player_const)
 
         new_smt = to_bool(player_const)
         child_tree.smt_constraints.extend(player_smt + [new_smt])

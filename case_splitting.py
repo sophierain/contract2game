@@ -19,18 +19,18 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree):
 
             # KIM: take care of upstream beh.
             # KIM: repeat for preconditions
-
+            print(hist+[child])
             split, upstream = is_dependent(child_tree.beh_case + child_tree.preconditions,\
-                                            tree.tracker, tree.interface, hist, entire_tree)
+                                            tree.tracker, child_tree.interface, hist+[child], entire_tree)
+            
+            # constr: Exp
+            # # what was it supposed to be
 
-            constr: Exp
-            # what was it supposed to be
-
-            if split:
-                if caller_dep(constr, tree.tracker):
-                    caller_split(tree, child, constr, upstream)
-                else:
-                    hist_split(tree, child, constr, upstream)
+            # if split:
+            #     if caller_dep(constr, tree.tracker):
+            #         caller_split(tree, child, constr, upstream)
+            #     else:
+            #         hist_split(tree, child, constr, upstream)
         return
 
 def caller_dep(constr: Exp, tracker: Tracker) -> bool:

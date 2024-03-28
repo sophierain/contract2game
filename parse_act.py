@@ -164,7 +164,9 @@ def parse_interface(interface: Dict) -> Interface:
     assert interface["kind"]=="Interface", "Unexpected 'kind': " + interface["kind"]+", expected 'Interface'"
     assert "id" in interface, "Missing 'id' key"
     assert "args" in interface, "Missing 'args' key"
-    return Interface(interface["id"], [parse_decl(elem) for elem in interface["args"]])
+    assert interface["id"][0] == "\""
+    assert interface["id"][-1] == "\""
+    return Interface(interface["id"][1:-1], [parse_decl(elem) for elem in interface["args"]])
 
 
 def parse_decl(decl: Dict) -> Decl:
@@ -172,7 +174,9 @@ def parse_decl(decl: Dict) -> Decl:
     assert decl["kind"]=="Declaration", "Unexpected 'kind': " + decl["kind"]+", expected 'Declaration'"
     assert "id" in decl, "Missing 'id' key"
     assert "abitype" in decl, "Missing 'abitype' key"
-    return Decl(decl["id"], parse_abitype(decl["abitype"])) 
+    assert decl["id"][0] == "\""
+    assert decl["id"][-1] == "\""
+    return Decl(decl["id"][1:-1], parse_abitype(decl["abitype"])) 
 
 
 def parse_boolexp(boolexp: Dict) -> Exp:

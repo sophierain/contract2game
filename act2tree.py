@@ -37,19 +37,17 @@ players = [Player("A", []), Player("B", [])]
 
 act_trees = []
 for considered_contract in act.find_maincontract():
-       #act_trees.append(contract2tree(considered_contract, extra_constraints, act.store))
        act_trees.append(contract2pest(considered_contract, extra_constraints, act.store, players))
 
 
 # print player enhanced state trees (their structure)
-# for tree in act_trees:
-#        tree.structure()
-#        print("\n")
+for tree in act_trees:
+       tree.structure()
+       print("\n")
 
 # apply case splitting algorithm to all trees
 for tree in act_trees:
        case_split(tree, [], tree)
-
 
 
 

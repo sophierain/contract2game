@@ -5,12 +5,18 @@ def is_dependent(constraints: List[Exp], tracker: Tracker, interface: List[Exp],
                  hist: List[str], tree: Tree) \
                                                      -> Tuple[bool, List[Upstream]]:
     
+
     tr_cons: List[Exp] = []
     forall_vars: List[Exp] = []
+    #print("is dependent constraints")
     for elem in constraints:
-        # print("banana")
-        # print(elem)
-        cons, vars = apply_tracker(elem, tree, hist)
+        #print("element")
+        #print(elem)
+        cons, vars = apply_tracker(elem, tree, hist[:-1])
+        #print("cons")
+        #print(cons)
+        #print("vars")
+        #print(vars)
         tr_cons.append(cons)
         forall_vars.extend(vars)
 
@@ -22,32 +28,38 @@ def is_dependent(constraints: List[Exp], tracker: Tracker, interface: List[Exp],
     call_value = HistEnvVar("Callvalue", hist_without_players, ActInt())
     exists_vars = interface + [call_value]
     remove_list(forall_vars, exists_vars)
+    print(forall_vars)
     
-    # translate to smt
-    smt_forall = [to_smt(var) for var in forall_vars]
-    smt_exists = [to_smt(var) for var in exists_vars]
-    smt_cons = [to_smt(cons) for cons in tr_cons]
+    # only proceed if there are problematic variables, otherwise trivially no case split required
+    if len(forall_vars)>0:
+        # translate to smt
+        smt_forall = [to_smt(var) for var in forall_vars]
+        smt_exists = [to_smt(var) for var in exists_vars]
+        smt_cons = [to_smt(cons) for cons in tr_cons]
 
 
-    conjunct = z3.And(*smt_cons)
-    for_all = z3.ForAll(smt_forall, conjunct)
-    exists = z3.Exists(smt_exists, for_all)
+        conjunct = z3.And(*smt_cons)
+        for_all = z3.ForAll(smt_forall, conjunct)
+        exists = z3.Exists(smt_exists, for_all)
 
-    solver = z3.Solver()
-    dependent = solver.check(exists)
-    # print(exists)
+        solver = z3.Solver()
+        dependent = solver.check(exists)
 
-    if dependent == z3.sat:
-        print("sat")
-        return False, []
-    
-    elif dependent == z3.unsat:
-        print("unsat, requires split")
-        return True, []
+        if dependent == z3.sat:
+            print("sat, no split")
+            return False, []
+        
+        elif dependent == z3.unsat:
+            print("unsat, requires split")
+            return True, []
 
+        else:
+            assert dependent == z3.unknown
+            assert False, "Warning: Z3 returned unknown"
+        
     else:
-        assert dependent == z3.unknown
-        assert False, "Warning: Z3 returned unknown"
+        print("sat, no split")
+        return False, []
 
 
 def remove_doubles(exps: List[Exp]):
