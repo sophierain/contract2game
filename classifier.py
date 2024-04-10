@@ -12,14 +12,14 @@ def is_dependent(constraints: List[Exp], tracker: Tracker, interface: List[Exp],
     for elem in constraints:
         #print("element")
         #print(elem)
-        cons, vars = apply_tracker(elem, tree, hist[:-1])
+        cons, vars = apply_tracker(elem, tree, hist)
         #print("cons")
         #print(cons)
         #print("vars")
         #print(vars)
         tr_cons.append(cons)
         forall_vars.extend(vars)
-
+ 
     # remove doubles from for_all_vars
     remove_doubles(forall_vars)
 
@@ -28,13 +28,14 @@ def is_dependent(constraints: List[Exp], tracker: Tracker, interface: List[Exp],
     call_value = HistEnvVar("Callvalue", hist_without_players, ActInt())
     exists_vars = interface + [call_value]
     remove_list(forall_vars, exists_vars)
-    print(forall_vars)
+    #print(forall_vars)
     
     # only proceed if there are problematic variables, otherwise trivially no case split required
     if len(forall_vars)>0:
         # translate to smt
         smt_forall = [to_smt(var) for var in forall_vars]
         smt_exists = [to_smt(var) for var in exists_vars]
+
         smt_cons = [to_smt(cons) for cons in tr_cons]
 
 
@@ -44,6 +45,10 @@ def is_dependent(constraints: List[Exp], tracker: Tracker, interface: List[Exp],
 
         solver = z3.Solver()
         dependent = solver.check(exists)
+
+        print(forall_vars)
+        print(exists_vars)
+        print(tr_cons)
 
         if dependent == z3.sat:
             print("sat, no split")
@@ -109,7 +114,7 @@ def remove_list(exps: List[Exp], remv: List[Exp]):
     return
 
 
-def apply_tracker(exp: Exp, tree: Tree, history: List[str]) -> Tuple[Exp, List[Exp]]:
+def apply_tracker(exp: Exp, tree: Tree, history: List[str], is_LE: bool = False) -> Tuple[Exp, List[Exp]]:
     """
     returns the new expression where the storage item is replaced by its current value 
     (+iteration in upstream) as the first argument
@@ -137,6 +142,19 @@ def apply_tracker(exp: Exp, tree: Tree, history: List[str]) -> Tuple[Exp, List[E
         return exp, [exp]
     
     elif isinstance(exp, HistEnvVar):
+        # replace caller by current player and if is LE flag was set, return the literal 0
+        if exp.name == "Caller" and len(exp.hist)==len(history):
+            history_wo_players = [elem.split("(")[0] for elem in history]
+            if all(exp.hist[i] == history_wo_players[i] for i in range(len(history))):
+                # the range checks for players are trivially true as players are abstract
+                if is_LE:
+                    return Lit(0, ActInt()), []
+                # find caller in the tracker
+                tracker = walk_the_tree(tree, history).tracker
+                for tracker_elem in tracker:
+                    if exp.is_equiv(tracker_elem.item):
+                        return tracker_elem.value, []
+                assert False, "caller was not found in the tracker"
         return exp, [exp]
     
     elif isinstance(exp, Player):
@@ -203,8 +221,8 @@ def apply_tracker(exp: Exp, tree: Tree, history: List[str]) -> Tuple[Exp, List[E
         return Lt(left, right), l_var + r_var 
     
     elif isinstance(exp, Le):
-        left, l_var = apply_tracker(exp.left, tree, history)
-        right, r_var = apply_tracker(exp.right, tree, history)
+        left, l_var = apply_tracker(exp.left, tree, history, True)
+        right, r_var = apply_tracker(exp.right, tree, history, True)
         return Le(left, right), l_var + r_var 
     
     elif isinstance(exp, Gt):

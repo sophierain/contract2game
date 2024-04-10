@@ -32,7 +32,7 @@ def add_ignore(tree: Tree, hist: List[str]):
 
     add ignore branch and children are the same as siblings
     """
-    print("add ignore")
+    # print("add ignore")
     #build a new tree
     # add the not the same player twice constraint and add it as new subtree
     children: Dict[str, Tree] = dict()
@@ -258,7 +258,7 @@ def align_tracker(tracker: Tracker, name: str, hist: List[str]) -> Tracker:
                 assert hist[i] == elem.upstream[i], f"{hist} vs {elem.upstream}"
             upstream = hist + [name] + elem.upstream[len(hist):]
         item = align_hist(elem.item, hist)
-        assert isinstance(item, HistItem)
+        assert isinstance(item, HistItem) or isinstance(item, HistEnvVar)
         value = align_hist(elem.value, hist)
 
         new_tracker.append(TrackerElem(item, value, upstream))
@@ -354,6 +354,8 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
         if child != "ignore":
             player_const = Eq(current_player, HistEnvVar("Caller", hist+[child], ActInt()))
             child_tree.updates.append(player_const)
+            player_tracker_elem = TrackerElem(HistEnvVar("Caller", hist+[child], ActInt()), current_player, hist+[child])
+            child_tree.tracker.append(player_tracker_elem)
 
             new_smt = to_bool(player_const)
             child_tree.smt_constraints.extend(player_smt + [new_smt])
@@ -392,6 +394,8 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
 
         player_const = Eq(current_player, HistEnvVar("Caller", hist+[child], ActInt()))
         child_tree.updates.append(player_const)
+        player_tracker_elem = TrackerElem(HistEnvVar("Caller", hist+[child], ActInt()), current_player, hist+[child])
+        child_tree.tracker.append(player_tracker_elem)
 
         new_smt = to_bool(player_const)
         child_tree.smt_constraints.extend(player_smt + [new_smt])

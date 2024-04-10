@@ -64,7 +64,7 @@ class AntiMap(StorageLoc):
 
 @dataclass
 class TrackerElem:
-    item: HistItem
+    item: Union[HistItem, HistEnvVar]
     value: Exp
     upstream: List[str]
 
@@ -707,9 +707,12 @@ def update_tracker(tracker: Tracker, updates: List[Exp], name: str) \
 
     for update in updates:
         assert isinstance(update, Eq)
-        assert isinstance(update.left, HistItem)
+        assert (isinstance(update.left, HistItem) or isinstance(update.left, HistEnvVar)) 
         item = update.left
-        value = update.right.copy_exp()
+        if isinstance(update.right, Player): # players aren't copied
+            value = update.right
+        else:
+            value = update.right.copy_exp()
         upstream = [stri for stri in update.left.hist]
 
         is_new = True 
@@ -826,7 +829,7 @@ def no_update(tracker: Tracker, updates: List[Exp]) -> List[Exp]:
     for update in updates:
         assert isinstance(update, Eq)
         item = update.left
-        assert isinstance(item, HistItem)
+        assert isinstance(item, HistItem) or isinstance(item, HistEnvVar)
 
         # search loc in tracker
         equi = False
@@ -942,9 +945,12 @@ def copy_tracker(tracker: Tracker) -> Tracker:
     for elem in tracker:
         upstream = [stri for stri in elem.upstream]
         item = elem.item.copy_exp()
-        assert isinstance(item, HistItem)
-
-        new_tracker.append(TrackerElem(item, elem.value.copy_exp(), upstream))
+        assert isinstance(item, HistItem) or isinstance(item, HistEnvVar)
+        if isinstance(elem.value, Player): # players aren't copied
+            value = elem.value
+        else:
+            value = elem.value.copy_exp()
+        new_tracker.append(TrackerElem(item, value, upstream))
 
     return new_tracker
 
@@ -955,10 +961,15 @@ def copy_update_tracker(tracker: Tracker, name: str) -> Tracker:
     for elem in tracker:
         upstream = [stri for stri in elem.upstream]
         item = elem.item.copy_exp()
-        assert isinstance(item, HistItem)
+        assert isinstance(item, HistItem) or isinstance(item, HistEnvVar)
         item.hist.append(name)
 
-        new_tracker.append(TrackerElem(item, elem.value.copy_exp(), upstream))
+        if isinstance(elem.value, Player): # players aren't copied
+            value = elem.value
+        else:
+            value = elem.value.copy_exp()
+
+        new_tracker.append(TrackerElem(item, value, upstream))
 
     return new_tracker
 
