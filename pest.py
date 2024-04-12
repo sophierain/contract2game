@@ -258,7 +258,7 @@ def align_tracker(tracker: Tracker, name: str, hist: List[str]) -> Tracker:
                 assert hist[i] == elem.upstream[i], f"{hist} vs {elem.upstream}"
             upstream = hist + [name] + elem.upstream[len(hist):]
         item = align_hist(elem.item, hist)
-        assert isinstance(item, HistItem) or isinstance(item, HistEnvVar)
+        assert isinstance(item, HistItem) or isinstance(item, HistEnvVar) or isinstance(item, Player)
         value = align_hist(elem.value, hist)
 
         new_tracker.append(TrackerElem(item, value, upstream))
@@ -352,10 +352,17 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
     for child, child_tree in state_tree.children.items():
         
         if child != "ignore":
-            player_const = Eq(current_player, HistEnvVar("Caller", hist+[child], ActInt()))
+            player_const = Eq(HistEnvVar("Caller", hist+[child], ActInt()), current_player)
             child_tree.updates.append(player_const)
             player_tracker_elem = TrackerElem(HistEnvVar("Caller", hist+[child], ActInt()), current_player, hist+[child])
             child_tree.tracker.append(player_tracker_elem)
+            # add previous players as tracker elements
+            for i in range(len(player_hist)):
+                part_hist = hist[:(i+1)]
+                player = player_hist[i]
+                player_tracker_elem = TrackerElem(HistEnvVar("Caller", part_hist, ActInt()), player, part_hist)
+                child_tree.tracker.append(player_tracker_elem)
+
 
             new_smt = to_bool(player_const)
             child_tree.smt_constraints.extend(player_smt + [new_smt])
@@ -392,10 +399,16 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
         child = "ignore"
         child_tree = state_tree.children["ignore"]
 
-        player_const = Eq(current_player, HistEnvVar("Caller", hist+[child], ActInt()))
+        player_const = Eq(HistEnvVar("Caller", hist+[child], ActInt()), current_player)
         child_tree.updates.append(player_const)
         player_tracker_elem = TrackerElem(HistEnvVar("Caller", hist+[child], ActInt()), current_player, hist+[child])
         child_tree.tracker.append(player_tracker_elem)
+        # add previous players as tracker elements
+        for i in range(len(player_hist)):
+            part_hist = hist[:(i+1)]
+            player = player_hist[i]
+            player_tracker_elem = TrackerElem(HistEnvVar("Caller", part_hist, ActInt()), player, part_hist)
+            child_tree.tracker.append(player_tracker_elem)
 
         new_smt = to_bool(player_const)
         child_tree.smt_constraints.extend(player_smt + [new_smt])
