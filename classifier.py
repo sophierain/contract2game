@@ -62,36 +62,40 @@ def is_dependent(constraints: List[Exp], tracker: Tracker, interface: List[Exp],
         smt_cons = [to_smt(cons) for cons in tr_cons]
         smt_prec = [to_smt(prec) for prec in prev_prec]
 
+        # negate: forall final_foralls (prev_crec -> exists exists_var: tr_cons) to
+        # prev_prec and forall exists_var: not(tr_cons); i.e we leave the final_foralls implicitly 
+        # existentially quantified; we do the negation to avoid a forall exists which is undecidable
+        # this hack works because there were no free variables in the initial formula and
+        # because we don't have uninterpreted functions
         conjunct = z3.And(*smt_cons)
+        negation = z3.Not(conjunct)
         precondition = z3.And(*smt_prec)
-        exists = z3.Exists(smt_exists, conjunct)
-        implication = z3.Implies(precondition, exists)
-        for_all = z3.ForAll(smt_forall, implication)
+        forall = z3.ForAll(smt_exists, negation)
+        formula = z3.And(precondition, forall)
         
 
         solver = z3.Solver()
 
         print("formula")
-        print(final_forall)
         print(prev_prec)
-        print("->")
-        print(exists_vars)
-        print(tr_cons)
+        print("AND")
+        print(f"forall {exists_vars}:")
+        print(f"NOT({tr_cons})")
         print()
 
         print("SMT formula")
-        print(for_all)
+        print(formula)
         print()
 
-        dependent = solver.check(for_all)
+        dependent = solver.check(formula)
         print("post SMT")
 
         if dependent == z3.sat:
-            print("sat, no split")
+            print("sat, case split required")
             return False, []
         
         elif dependent == z3.unsat:
-            print("unsat, requires split")
+            print("unsat, no split")
             return True, []
 
         else:
@@ -99,7 +103,7 @@ def is_dependent(constraints: List[Exp], tracker: Tracker, interface: List[Exp],
             assert False, "Warning: Z3 returned unknown"
         
     else:
-        print("sat, no split")
+        print("no split")
         return False, []
 
 
