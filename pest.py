@@ -126,7 +126,7 @@ def align_hist(exp: Exp, hist: List[str]) -> Exp:
         if len(hist) == len(exp.hist):
             for i in range(len(hist)):
                 assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
-            new_hist = hist + ["ignore"]
+            new_hist = hist
         elif len(hist) > len(exp.hist):
             for i in range(len(exp.hist)):
                 assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
@@ -142,7 +142,7 @@ def align_hist(exp: Exp, hist: List[str]) -> Exp:
         if len(hist) == len(exp.hist):
             for i in range(len(hist)):
                 assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
-            new_hist = hist + ["ignore"]
+            new_hist = hist
         elif len(hist) > len(exp.hist):
             for i in range(len(exp.hist)):
                 assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
@@ -245,24 +245,30 @@ def align_tracker(tracker: Tracker, name: str, hist: List[str]) -> Tracker:
     new_tracker: Tracker = []
 
     for elem in tracker:
-        if len(hist) == len(elem.upstream):
-            for i in range(len(hist)):
-                assert hist[i] == elem.upstream[i], f"{hist} vs {elem.upstream}"
-            upstream = hist + [name]
-        elif len(hist) > len(elem.upstream):
-            for i in range(len(elem.upstream)):
-                assert hist[i] == elem.upstream[i], f"{hist} vs {elem.upstream}"
-            upstream = elem.upstream
+        if not isinstance(elem.item, HistEnvVar):    
+            if len(hist) == len(elem.upstream):
+                for i in range(len(hist)):
+                    assert hist[i] == elem.upstream[i], f"{hist} vs {elem.upstream}"
+                upstream = hist + [name]
+            elif len(hist) > len(elem.upstream):
+                for i in range(len(elem.upstream)):
+                    assert hist[i] == elem.upstream[i], f"{hist} vs {elem.upstream}"
+                upstream = elem.upstream
+            else:
+                for i in range(len(hist)):
+                    assert hist[i] == elem.upstream[i], f"{hist} vs {elem.upstream}"
+                upstream = hist + [name] + elem.upstream[len(hist):]
+            item = align_hist(elem.item, hist)
+            assert isinstance(item, HistItem) or isinstance(item, HistEnvVar) or isinstance(item, Player)
+            value = align_hist(elem.value, hist)
+
+            new_tracker.append(TrackerElem(item, value, upstream))
         else:
-            for i in range(len(hist)):
-                assert hist[i] == elem.upstream[i], f"{hist} vs {elem.upstream}"
-            upstream = hist + [name] + elem.upstream[len(hist):]
-        item = align_hist(elem.item, hist)
-        assert isinstance(item, HistItem) or isinstance(item, HistEnvVar) or isinstance(item, Player)
-        value = align_hist(elem.value, hist)
-
-        new_tracker.append(TrackerElem(item, value, upstream))
-
+            if not isinstance(elem.value, Player):
+                new_value = elem.value.copy_exp()
+            else:
+                new_value = elem.value
+            new_tracker.append(TrackerElem(elem.item.copy_exp(), new_value , [step for step in elem.upstream]))
     return new_tracker
 
 
@@ -403,12 +409,11 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
         child_tree.updates.append(player_const)
         player_tracker_elem = TrackerElem(HistEnvVar("Caller", hist+[child], ActInt()), current_player, hist+[child])
         child_tree.tracker.append(player_tracker_elem)
-        # add previous players as tracker elements
-        for i in range(len(player_hist)):
-            part_hist = hist[:(i+1)]
-            player = player_hist[i]
-            player_tracker_elem = TrackerElem(HistEnvVar("Caller", part_hist, ActInt()), player, part_hist)
-            child_tree.tracker.append(player_tracker_elem)
+
+        # print(hist+[child])
+        # print("Tracker")
+        # print(child_tree.tracker)
+        child_tree.updates.extend(no_update(child_tree.tracker, child_tree.updates))
 
         new_smt = to_bool(player_const)
         child_tree.smt_constraints.extend(player_smt + [new_smt])

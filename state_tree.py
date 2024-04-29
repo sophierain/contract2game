@@ -850,8 +850,9 @@ def noup_cons(noup: List[HistItem]) -> List[Exp]:
 
     constraints: List[Exp] = []
     for elem in noup: 
-        cons = Eq(elem.copy_exp(), HistItem(elem.loc.copy_loc(), [stri for stri in elem.hist[:-1]], elem.type) )
-        constraints.append(cons)
+        if not isinstance(elem, HistEnvVar):
+            cons = Eq(elem.copy_exp(), HistItem(elem.loc.copy_loc(), [stri for stri in elem.hist[:-1]], elem.type) )
+            constraints.append(cons)
 
     return constraints
 

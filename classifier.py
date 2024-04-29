@@ -1,9 +1,18 @@
 from pest import *
 import itertools
 
-def is_dependent(constraints: List[Exp], tracker: Tracker, interface: List[Exp],
+def is_dependent(constraints: List[Exp], interface: List[Exp],
                  hist: List[str], tree: Tree) \
-                                                     -> Tuple[bool, List[Upstream]]:
+                                                     -> Tuple[bool, Upstream | None, List[Exp] | None]:
+    """takes the list of preconditons (and case_conditions) as "constraints", the interface of the current function "interface",
+        the current history to the node in the tree "hist" and the entire tree "tree"
+        the function computes whether the constraints can ever be falsified by previous players and their choice of parameter.
+        This is done using the tracker at the respective subtree.  
+        If the constraints can indeed be falsified, a split earlier in the tree is needed. The actual splitting point is computed
+        to be the last parent node of the current subtree, for which a variable occurred that could be part of the reason why 
+        the constraints were falsified.
+    """
+
 
     tr_cons: List[Exp] = []
     forall_vars: List[Exp] = []
@@ -32,7 +41,7 @@ def is_dependent(constraints: List[Exp], tracker: Tracker, interface: List[Exp],
   
     # check the forall vars for preconditions of previous fcts, use the callers!
     # prev_prec using players instead of callers
-    _, additional_player_foralls, prev_prec = compute_prev_prec(tree, forall_vars, forall_player_vars ,hist) 
+    additional_foralls, additional_player_foralls, prev_prec = compute_prev_prec(tree, forall_vars, forall_player_vars ,hist) 
 
 
     final_forall = additional_player_foralls + forall_player_vars
@@ -46,7 +55,7 @@ def is_dependent(constraints: List[Exp], tracker: Tracker, interface: List[Exp],
     # add inrange preconditions for all quantified players
     for player in quant_players:
         prev_prec.append(Le(Lit(0, ActInt()), player))
-        prev_prec.append(Le(player, Lit((2**256) -1, ActInt())))
+        prev_prec.append(Le(player, Lit((2**160) -1, ActInt())))
     # add distinctness preconditions for all pairs of players
     player_pairs = itertools.combinations(quant_players, 2)
     for pair in player_pairs:
@@ -56,7 +65,6 @@ def is_dependent(constraints: List[Exp], tracker: Tracker, interface: List[Exp],
     # only proceed if there are problematic variables, otherwise trivially no case split required
     if len(final_forall)>0:
         # translate to smt
-        smt_forall = [to_smt(var) for var in final_forall]
         smt_exists = [to_smt(var) for var in exists_vars]
 
         smt_cons = [to_smt(cons) for cons in tr_cons]
@@ -76,27 +84,37 @@ def is_dependent(constraints: List[Exp], tracker: Tracker, interface: List[Exp],
 
         solver = z3.Solver()
 
-        print("formula")
-        print(prev_prec)
-        print("AND")
-        print(f"forall {exists_vars}:")
-        print(f"NOT({tr_cons})")
-        print()
+        # print("formula")
+        # print(prev_prec)
+        # print("AND")
+        # print(f"forall {exists_vars}:")
+        # print(f"NOT({tr_cons})")
+        # print()
 
-        print("SMT formula")
-        print(formula)
-        print()
+        # print("SMT formula")
+        # print(formula)
+        # print()
 
         dependent = solver.check(formula)
-        print("post SMT")
 
         if dependent == z3.sat:
             print("sat, case split required")
-            return False, []
+            # in the foralls with the callers instead of players we have the history of all relevant variables
+            possible_split_causes = additional_foralls + forall_vars
+            split_location = []
+            # pick longest history that is not the current one (cause we have to split above the current one)
+            for cause in possible_split_causes:
+                assert isinstance(cause, HistEnvVar) or isinstance(cause, HistVar)
+                if len(cause.hist) > len(split_location) and len(cause.hist) < len(hist):
+                    split_location = cause.hist
+
+
+
+            return True, hist[:len(split_location)], tr_cons 
         
         elif dependent == z3.unsat:
             print("unsat, no split")
-            return True, []
+            return False, None, None
 
         else:
             assert dependent == z3.unknown
@@ -104,7 +122,7 @@ def is_dependent(constraints: List[Exp], tracker: Tracker, interface: List[Exp],
         
     else:
         print("no split")
-        return False, []
+        return False, None, None
 
 
 def remove_doubles(exps: List[Exp]):
