@@ -1,5 +1,9 @@
+import json
+import itertools
+from typing import NamedTuple
 from typing import Union, Set, Dict, List, Any, Tuple
 from dataclasses import dataclass
+import dataclasses
 from parse_act import *
 from act_ast import *
 import z3
@@ -11,13 +15,13 @@ import logging
 Integer = Union[int, z3.ArithRef]
 Boolean = Union[bool, z3.BoolRef]
 String = Union[str, z3.SeqRef]
-SymVar = Union[Integer, Boolean, String, z3.FuncDeclRef] 
+SymVar = Union[Integer, Boolean, String, z3.FuncDeclRef]
 #is_string, is_int, is_bool are the type check calls
 
-Upstream = List[str]      
+Upstream = List[str]
 """
 x = z3.Int(<name>): z3.ArithRef                                         integer constant named <name>
-z = z3.Bool(<name>): z3.BoolRef   
+z = z3.Bool(<name>): z3.BoolRef
 s = z3.String(<name>): z3.SeqRef                                                  boolean constant named <name>
 y = z3.Function(<fct_name>, <z3 input sort(s)>, <z3 ouput sort>): z3.FuncDeclRef   uninterpreted function named <fct_name>
 """
@@ -76,7 +80,6 @@ class TrackerElem:
 
 Tracker = List[TrackerElem]
 
-
 @dataclass
 class Tree:
     """a node with possibly 0 children"""
@@ -91,7 +94,7 @@ class Tree:
     interface: List[Exp]
 
     def __repr__(self, level = 0) -> str:  # to be adapted, prettify printing of trackerelem and exp
-        
+
         indent = "   "*level
         res = f"{indent}State: \n"
         res = res + f"{indent}   Tracker:\n"
@@ -117,17 +120,17 @@ class Tree:
 
     def structure(self, level: int = 0):
         add = ''
-        
+
         if level == 0:
             if self.player:
                 add = self.player.name
-            else: 
+            else:
                 add = "None"
             print("[] --> " + add)
         for key, value in self.children.items():
                 if value.player:
                     add = value.player.name
-                else: 
+                else:
                     add = "None"
                 print("   " + level*"   " + key + " --> " + add)
                 value.structure(level + 1)
@@ -146,27 +149,112 @@ class Tree:
             children[key] = value.copy()
         interface: List[Exp] = [var.copy_exp() for var in self.interface]
 
-        return Tree(player, tracker, beh_case, preconditions, updates, split_constraints, 
+        return Tree(player, tracker, beh_case, preconditions, updates, split_constraints,
                     children, smt_constraints, interface)
-        
+
     def add_child(self, child: 'Tree', name: str):
         assert name not in self.children.keys()
         self.children[name] = child
 
+@dataclass(frozen=True)
+class TreeVal:
+    player: Player | None
+    tracker: Tracker
+    beh_case: List[Exp]
+    preconditions: List[Exp]
+    updates: List[Exp]
+    split_constraints: List[Exp] # are actually new case conditions
+    smt_constraints: List[Boolean]
+    interface: List[Exp]
+
+    def __iter__(self):
+        return (getattr(self, field.name) for field in dataclasses.fields(self))
+
+    def from_tree(tree : Tree):
+        return TreeVal(
+            player = tree.player,
+            tracker = tree.tracker,
+            beh_case = tree.beh_case,
+            preconditions = tree.preconditions,
+            updates = tree.updates,
+            split_constraints = tree.split_constraints,
+            smt_constraints = tree.smt_constraints,
+            interface = tree.interface,
+        )
+
+    def to_tree(self, children : List[Tree]):
+        return Tree(
+            player = self.player,
+            tracker = self.tracker,
+            beh_case = self.beh_case,
+            preconditions = self.preconditions,
+            updates = self.updates,
+            split_constraints = self.split_constraints,
+            smt_constraints = self.smt_constraints,
+            interface = self.interface,
+            children = children,
+        )
+
+
+@dataclass(frozen=True)
+class Crumb:
+    parent: TreeVal
+    left_kids: List[Tree]
+    right_kids: List[Tree]
+
+    def __iter__(self):
+        return (getattr(self, field.name) for field in dataclasses.fields(self))
+
+@dataclass(frozen=True)
+class Zipper:
+    item: Tree
+    path: [Crumb]
+
+    def __iter__(self):
+        return (getattr(self, field.name) for field in dataclasses.fields(self))
+
+    def from_tree(tree : Tree) -> Zipper:
+        return Zipper(tree,[])
+
+    def visit_child(self : Zipper, idx : int) -> Zipper:
+        curr_focus, path = self
+        left = list(itertools.islice(curr_focus.children.items(), idx))
+        new_focus, *right = list(itertools.islice(curr_focus.children.items(), idx, None))
+        crumb = Crumb(TreeVal.from_tree(curr_focus), left, right)
+        return Zipper(new_focus, [crumb, *path])
+
+    # visitParent :: Zipper -> Zipper
+    # visitParent (focus, Crumb parent left right : cs) =
+    #   (Node parent (left ++ [focus] ++ right), cs)
+    def visit_parent(self : Zipper) -> Zipper:
+        curr_focus, [(parent, left, right), *cs] = self
+        return Zipper(parent.to_tree([*left, curr_focus, *right]), cs)
+
+
+
+def mk_zipper() -> Zipper:
+    obj = json.load(open("/home/me/src/ethereum/contract2game/test_ex.json"))
+    act = parse_act_json(obj)
+    tree = contract2tree(act.contracts[0], [], act.store)
+    zipper = Zipper.from_tree(tree)
+    transformed = zipper.visit_child(0).visit_parent()
+    print(zipper)
+    print(transformed)
+
 # main functions
 
 def contract2tree(contract: Contract, extra_constraints: List[Exp], store: Storage) -> Tree:
-    """ 
+    """
     contract: contract to be analyzed
     storage: storage dict of contract, contains all variables to be considered
     extra_constraints: a list of user defined constraints to be enforced as preconditions
 
     returns: a tree containg all possible sequential executions of the different behaviors of the contract
-    
+
     """
 
     init_tracker, init_prec, init_updates = init_state(contract.constructor, extra_constraints, store)
-    
+
     return generate_tree([to_bool(exp) for exp in init_prec + init_updates], \
                           init_tracker, init_prec, init_updates, [], [],  \
                           contract.name, contract.behaviors, [])
@@ -178,9 +266,9 @@ def init_state(ctor: Constructor, extraConstraints: List[Exp], store: Storage) -
     ctor: constructor of the contract, might be used later
     extra_constraints: a list of user defined constraints to be enforced as preconditions List[Boolean]
 
-    returns: all ingredients to create the root of a tree containing translated storage information to smt concepts, 
+    returns: all ingredients to create the root of a tree containing translated storage information to smt concepts,
              and collected initial constraints from user
-    
+
     """
     prec = []
     updates = []
@@ -202,8 +290,8 @@ def init_state(ctor: Constructor, extraConstraints: List[Exp], store: Storage) -
 def decl_tracker(store: Storage) -> Tracker:
     """
     storage: contract -> name -> Slottype (MappingType, ContractType, AbiType)
-    storageloc: 
-        varloc: contract 
+    storageloc:
+        varloc: contract
                 name
         contractloc: loc
                      contract
@@ -235,10 +323,10 @@ def decl_tracker(store: Storage) -> Tracker:
 
             for histitem, defi in hist_list:
                 tracker.append(TrackerElem(histitem, defi, []))
-    
+
     return tracker
 
-                
+
 def unroll_slot(loc: StorageLoc, slot: SlotType, store: Storage) \
                                 -> List[Tuple[StorageLoc, ActType]]:
 
@@ -254,7 +342,7 @@ def unroll_slot(loc: StorageLoc, slot: SlotType, store: Storage) \
                 type = ActBool()
             elif isinstance(slot, AbiStringType):
                 type =  ActByteStr()
-            else: 
+            else:
                 assert False, "unsupported Abitype"
             return [(loc, type)]
         else:
@@ -269,7 +357,7 @@ def unroll_slot(loc: StorageLoc, slot: SlotType, store: Storage) \
     else:
         assert isinstance(slot, MappingType)
         loa: List[List[Exp]] = []
-        
+
         assert isinstance(slot.resultType, AbiType)
         if isinstance(slot.resultType, AbiIntType):
             rtype: ActType = ActInt()
@@ -281,7 +369,7 @@ def unroll_slot(loc: StorageLoc, slot: SlotType, store: Storage) \
             rtype = ActBool()
         elif isinstance(slot.resultType, AbiStringType):
             rtype =  ActByteStr()
-        else: 
+        else:
             assert False, "unsupported Abitype"
 
         args_type: List[ActType] = []
@@ -297,7 +385,7 @@ def unroll_slot(loc: StorageLoc, slot: SlotType, store: Storage) \
                 atype = ActBool()
             elif isinstance(vtype, AbiStringType):
                 atype =  ActByteStr()
-            else: 
+            else:
                 assert False, "unsupported Abitype"
             args_type.append(atype)
 
@@ -316,7 +404,7 @@ def init_tracker(updates: List[Exp], store: Storage) -> Tracker:
         value = update.right.copy_exp()
         upstream: List[str] = []
 
-        is_new = True 
+        is_new = True
         # only applies to mappingloc and is true iff the args are seen the first time
         antielem_index = -1
 
@@ -330,7 +418,7 @@ def init_tracker(updates: List[Exp], store: Storage) -> Tracker:
                 if isinstance(t_item.loc, AntiMap):
                     if t_item.loc.loc.is_equiv(item.loc.loc):
                         antielem_index = i
-        
+
         if is_new:
             assert isinstance(item.loc, MappingLoc)
 
@@ -346,7 +434,7 @@ def init_tracker(updates: List[Exp], store: Storage) -> Tracker:
             # print(f"\n")
 
             assert antielem_index > -1, f"antimap not initialized"
-            # add new mapping instance to tracker 
+            # add new mapping instance to tracker
             new_item = item.copy_exp()
             assert isinstance(new_item, HistItem)
             tracker.append(TrackerElem(new_item, value, upstream))
@@ -356,7 +444,7 @@ def init_tracker(updates: List[Exp], store: Storage) -> Tracker:
             anti_map.extend_loa(item.loc.args)
 
     return tracker
-    
+
 
 def to_hist(hist: List[str], exp: Exp) -> Exp:
     '''
@@ -367,12 +455,12 @@ def to_hist(hist: List[str], exp: Exp) -> Exp:
     non_cnf = isinstance(exp, Implies) or isinstance(exp, InRange)
 
     assert not non_cnf, "to_cnf to be called first"
-    
-    if isinstance(exp, StorageItem): 
+
+    if isinstance(exp, StorageItem):
         if exp.time == Pre():
             assert len(hist)>0, f"{exp}"
             item_hist = [elem for elem in hist[:-1]]
-        else: 
+        else:
             item_hist = [elem for elem in hist]
 
         if isinstance(exp.loc, MappingLoc):
@@ -380,15 +468,15 @@ def to_hist(hist: List[str], exp: Exp) -> Exp:
             return HistItem(exp_locm, item_hist, exp.type)
         else:
             exp_loc = exp.loc.copy_loc()
-        
+
             return HistItem(exp_loc, item_hist, exp.type)
-    
+
     elif  isinstance(exp, Var):
         return HistVar(exp.name, [elem for elem in hist], exp.type)
-    
+
     elif  isinstance(exp, EnvVar):
         return HistEnvVar(exp.name, [elem for elem in hist], exp.type)
-    
+
     elif isinstance(exp, Lit):
         return exp.copy_exp()
     elif isinstance(exp, And):
@@ -426,22 +514,22 @@ def to_hist(hist: List[str], exp: Exp) -> Exp:
 
 
 def generate_tree(
-                  constraints: List[Boolean], 
+                  constraints: List[Boolean],
                   tracker: Tracker,
                   prec: List[Exp],
                   updates: List[Exp],
-                  case_cond: List[Exp], 
-                  history: List[str], 
-                  contract_name: str, 
+                  case_cond: List[Exp],
+                  history: List[str],
+                  contract_name: str,
                   behvs: List[Behavior],
                   interface: List[Exp])             -> Tree:
     """
-    recursively extends the tree by applying all behaviors to all leaves 
+    recursively extends the tree by applying all behaviors to all leaves
     until no new reachable states are found
     """
 
     children_solver = z3.Solver()
-    
+
     children: Dict[str, Tree] = dict()
     for behv in behvs:
         child_name = behv.name + "__" + to_node_name(behv.caseConditions)
@@ -455,7 +543,7 @@ def generate_tree(
             reachable = children_solver.check(constraints + child_constraints)
             if reachable == z3.sat:
                 child_interface = gen_interface(behv.interface, history + [child_name])
-                children[child_name] = generate_tree(constraints + child_constraints, 
+                children[child_name] = generate_tree(constraints + child_constraints,
                                                     child_tracker,
                                                     child_prec,
                                                     child_updates,
@@ -467,7 +555,7 @@ def generate_tree(
             elif reachable == z3.unknown:
                 logging.info("solver returned 'unkown'")
                 assert False
-        
+
     return Tree(None, tracker, case_cond, prec, updates, [], children, constraints, interface)
 
 def gen_interface(interface: Interface, hist: List[str]) -> List[Exp]:
@@ -517,8 +605,8 @@ def to_smt( exp: Exp) -> Integer | Boolean | String:
         Implies
 
         ITE
-        Eq 
-        Neq 
+        Eq
+        Neq
         InRange
 
         Lt
@@ -530,7 +618,7 @@ def to_smt( exp: Exp) -> Integer | Boolean | String:
         Sub
         Mul
         Div
-        Pow 
+        Pow
     """
     # variables, constants, functions
 
@@ -543,52 +631,52 @@ def to_smt( exp: Exp) -> Integer | Boolean | String:
 
     if isinstance(exp, Lit):
         return exp.value
-    
-    elif isinstance(exp, HistVar): 
+
+    elif isinstance(exp, HistVar):
         if isinstance(exp.type, ActBool):
             return z3.Bool(to_label(exp.hist, exp.name))
         elif isinstance(exp.type, ActByteStr):
             return z3.String(to_label(exp.hist, exp.name))
         else:
             return z3.Int(to_label(exp.hist, exp.name))
-    
-    elif isinstance(exp, HistEnvVar): 
+
+    elif isinstance(exp, HistEnvVar):
         if isinstance(exp.type, ActBool):
             return z3.Bool(to_label(exp.hist, exp.name))
         elif isinstance(exp.type, ActByteStr):
             return z3.String(to_label(exp.hist, exp.name))
         else:
             return z3.Int(to_label(exp.hist, exp.name))
-       
+
     elif isinstance(exp, HistItem):
-        gen_storeloc = generate_smt_storageloc(exp.hist, exp.loc, exp.type) 
+        gen_storeloc = generate_smt_storageloc(exp.hist, exp.loc, exp.type)
         assert not isinstance(gen_storeloc, z3.FuncDeclRef)
         return gen_storeloc
-    
+
     elif isinstance(exp, Player):
         return z3.Int(exp.name)
-    
+
     # boolean expressions
 
     elif isinstance(exp, And):
         return z3.And(to_bool(exp.left),
                       to_bool(exp.right)
                       )
-    
+
     elif isinstance(exp, Or):
-        return z3.Or(to_bool(exp.left), 
+        return z3.Or(to_bool(exp.left),
                      to_bool(exp.right)
                      )
-    
+
     elif isinstance(exp, Not):
         return z3.Not(to_bool(exp.value))
-    
+
     elif isinstance(exp, ITE):
         return z3.If(to_bool(exp.condition),
                      to_smt(exp.left),
                      to_smt(exp.right)
-                     )                   
-    
+                     )
+
     elif isinstance(exp, Eq):
         both_bool = isinstance(exp.left.type, ActBool) and isinstance(exp.right.type, ActBool)
         both_int = isinstance(exp.left.type, ActInt) and isinstance(exp.right.type, ActInt)
@@ -600,7 +688,7 @@ def to_smt( exp: Exp) -> Integer | Boolean | String:
                 assert isinstance(exp.right, HistItem)
                 assert isinstance(exp.right.loc, AntiMap)
                 return func_update(exp.left, exp.right)
-        
+
         return to_smt(exp.left) == to_smt(exp.right)
 
     elif isinstance(exp, Neq):
@@ -608,9 +696,9 @@ def to_smt( exp: Exp) -> Integer | Boolean | String:
         both_int = isinstance(exp.left.type, ActInt) and isinstance(exp.right.type, ActInt)
         both_bytestr = isinstance(exp.left.type, ActByteStr) and isinstance(exp.right.type, ActByteStr)
         assert both_bool or both_int or both_bytestr, "left and right have to be of the same type"
-        return z3.Not(to_smt(exp.left) == 
+        return z3.Not(to_smt(exp.left) ==
                       to_smt(exp.right))
-    
+
     elif isinstance(exp, Lt):
         return to_int(exp.left) < \
                to_int(exp.right)
@@ -618,29 +706,29 @@ def to_smt( exp: Exp) -> Integer | Boolean | String:
     elif isinstance(exp, Le):
         return to_int(exp.left) <= \
                to_int(exp.right)
-    
+
     elif isinstance(exp, Gt):
         return to_int(exp.left) > \
                to_int(exp.right)
-    
+
     elif isinstance(exp, Ge):
         return to_int(exp.left) >= \
                to_int(exp.right)
 
     # integer expressions:
- 
+
     elif isinstance(exp, Add):
         return to_int(exp.left) + \
                to_int(exp.right)
-    
+
     elif isinstance(exp, Sub):
         return to_int(exp.left) - \
                to_int(exp.right)
-    
+
     elif isinstance(exp, Mul):
         return to_int(exp.left) * \
                to_int(exp.right)
-    
+
     elif isinstance(exp, Div):
         nom = to_int(exp.left)
         div = to_int(exp.left)
@@ -658,12 +746,12 @@ def to_smt( exp: Exp) -> Integer | Boolean | String:
         return left ** right
 
     else:
-        assert False 
-     
+        assert False
+
 
 def apply_behaviour(tracker: Tracker,
-                    history: List[str], 
-                    contract_name: str, 
+                    history: List[str],
+                    contract_name: str,
                     behv: Behavior)         -> Tuple[Tracker, List[Exp], List[Exp], List[Exp]]:
 
     prec = []
@@ -674,7 +762,7 @@ def apply_behaviour(tracker: Tracker,
 
     for exp in behv.caseConditions:
         case_cond.append(to_hist(history, exp))
-  
+
     for exp in behv.preConditions:
         prec.append(to_hist(history, exp))
 
@@ -684,7 +772,7 @@ def apply_behaviour(tracker: Tracker,
         updates.append(to_hist(history, exp))
 
     new_tracker = update_tracker(tracker, updates, name)
-   
+
     no_update_constraints = no_update(new_tracker, updates)
 
     return new_tracker, prec, updates + no_update_constraints, case_cond
@@ -706,7 +794,7 @@ def update_tracker(tracker: Tracker, updates: List[Exp], name: str) \
         value = update.right.copy_exp()
         upstream = [stri for stri in update.left.hist]
 
-        is_new = True 
+        is_new = True
         # only applies to mappingloc and is true iff the args are seen the first time
         antielem_index = -1
 
@@ -721,7 +809,7 @@ def update_tracker(tracker: Tracker, updates: List[Exp], name: str) \
                 if isinstance(t_item.loc, AntiMap):
                     if t_item.loc.loc.is_equiv(item.loc.loc):
                         antielem_index = i
-        
+
         if is_new:
             assert isinstance(item.loc, MappingLoc)
 
@@ -737,7 +825,7 @@ def update_tracker(tracker: Tracker, updates: List[Exp], name: str) \
             # print(f"\n")
 
             assert antielem_index > -1, f"antimap not initialized"
-            # add new mapping instance to tracker 
+            # add new mapping instance to tracker
             new_item = item.copy_exp()
             assert isinstance(new_item, HistItem)
             new_tracker.append(TrackerElem(new_item, value, upstream))
@@ -747,10 +835,10 @@ def update_tracker(tracker: Tracker, updates: List[Exp], name: str) \
             anti_map.extend_loa(item.loc.args)
 
     return new_tracker
-    
+
 
 def generate_smt_storageloc(
-                            history: List[str], 
+                            history: List[str],
                             loc: StorageLoc,
                             type: ActType)      ->     SymVar:
     """returns the correct smt variable from the SymStore"""
@@ -792,8 +880,8 @@ def generate_smt_storageloc(
         fun_name = to_name(loc.loc)
         fun_name = to_label(history, fun_name)
         func = z3.Function(fun_name, *arg_types, result)
-        return func(*smt_args) 
-    
+        return func(*smt_args)
+
     else:
         assert isinstance(loc, ContractLoc)
         var = to_name(loc)
@@ -809,7 +897,7 @@ def generate_smt_storageloc(
 
 def no_update(tracker: Tracker, updates: List[Exp]) -> List[Exp]:
     """Identifies all SymVars from poststore that are not assigned a new value in the updates contraints.
-    Returns a list of constraints that assert the not-updated poststore Symvars have the same value as the 
+    Returns a list of constraints that assert the not-updated poststore Symvars have the same value as the
     respective prestore symvars.
     Only add the constraints for the main contract, others irrelevant
     """
@@ -839,7 +927,7 @@ def no_update(tracker: Tracker, updates: List[Exp]) -> List[Exp]:
 def noup_cons(noup: List[HistItem]) -> List[Exp]:
 
     constraints: List[Exp] = []
-    for elem in noup: 
+    for elem in noup:
         if not isinstance(elem, HistEnvVar):
             cons = Eq(elem.copy_exp(), HistItem(elem.loc.copy_loc(), [stri for stri in elem.hist[:-1]], elem.type) )
             constraints.append(cons)
@@ -849,7 +937,7 @@ def noup_cons(noup: List[HistItem]) -> List[Exp]:
 
 def func_update(left: HistItem, right: HistItem) -> Boolean:
     """ construct forall quantified formula stating 'pref'=='postf' everywhere except on the 'exc' points"""
-    
+
     assert isinstance(left.loc, AntiMap)
     assert isinstance(right.loc, AntiMap)
 
@@ -858,7 +946,7 @@ def func_update(left: HistItem, right: HistItem) -> Boolean:
     arg_acttypes = left.loc.arg_types
     assert num_args > 0
     assert all([num_args == len(elem) for elem in raw_exc]) #num args check
-    assert all([ all([elem[i].type == arg_acttypes[i] for elem in raw_exc]) 
+    assert all([ all([elem[i].type == arg_acttypes[i] for elem in raw_exc])
                 for i in range(num_args)]) #type check
 
     exc: List[List[Integer | Boolean | String]] = []
@@ -929,7 +1017,7 @@ def func_update(left: HistItem, right: HistItem) -> Boolean:
 def copy_tracker(tracker: Tracker) -> Tracker:
     """
     fresh instances of item and upstream as those can change in a tracker;
-    value is shallowly assigned 
+    value is shallowly assigned
     """
 
     new_tracker: Tracker = []
@@ -953,7 +1041,7 @@ def copy_update_tracker(tracker: Tracker, name: str) -> Tracker:
     for elem in tracker:
         upstream = [stri for stri in elem.upstream]
         item = elem.item.copy_exp()
-        assert isinstance(item, HistItem) or isinstance(item, HistEnvVar) 
+        assert isinstance(item, HistItem) or isinstance(item, HistEnvVar)
         if not isinstance(item, Player):
             item.hist.append(name)
 
@@ -980,7 +1068,7 @@ def to_name(loc: StorageLoc) -> str:
     assert not isinstance(loc, MappingLoc)
     if isinstance(loc, VarLoc):
         return to_storage_label(loc.contract, loc.name)
-    else: 
+    else:
         assert isinstance(loc, ContractLoc)
         return to_storage_label(to_name(loc.loc), loc.field)
 
@@ -996,36 +1084,36 @@ def to_node_name(case: List[Exp])-> str:
 def to_node_smt(exp: Exp)-> str:
     if isinstance(exp, Lit):
         return str(exp.value)
-    
-    elif isinstance(exp, Var): 
+
+    elif isinstance(exp, Var):
         return str(exp.name)
-    
-    elif isinstance(exp, EnvVar): 
+
+    elif isinstance(exp, EnvVar):
         return str(exp.name)
-       
+
     elif isinstance(exp, StorageItem):
-        gen_storeloc = storageloc2node(exp.loc, exp.time) 
+        gen_storeloc = storageloc2node(exp.loc, exp.time)
         return gen_storeloc
-    
+
     # boolean expressions
 
     elif isinstance(exp, And):
         return "(" + to_node_smt(exp.left) + " and " +to_node_smt(exp.right) +")"
-    
+
     elif isinstance(exp, Or):
         return "(" + to_node_smt(exp.left) + " or " +to_node_smt(exp.right) +")"
-    
+
     elif isinstance(exp, Not):
         return  "not(" + to_node_smt(exp.value) + ")"
-    
+
     elif isinstance(exp, Implies):
         return "(" + to_node_smt(exp.left) + " -> " +to_node_smt(exp.right) +")"
-    
+
     elif isinstance(exp, ITE):
         return  "if " + to_node_smt(exp.condition) + \
                 " then " + to_node_smt(exp.left) + \
-                " else " + to_node_smt(exp.right)                        
-    
+                " else " + to_node_smt(exp.right)
+
     elif isinstance(exp, Eq):
         return "(" + to_node_smt(exp.left) + " = " +to_node_smt(exp.right) +")"
 
@@ -1042,37 +1130,37 @@ def to_node_smt(exp: Exp)-> str:
         else:
             assert False
         return to_node_smt(exp.expr) + " inrange " + ran
-    
+
     elif isinstance(exp, Lt):
         return "(" + to_node_smt(exp.left) + " < " + to_node_smt(exp.right) +")"
 
     elif isinstance(exp, Le):
         return "(" + to_node_smt(exp.left) + " <= " + to_node_smt(exp.right) +")"
 
-    
+
     elif isinstance(exp, Ge):
         return "(" + to_node_smt(exp.left) + " >= " +to_node_smt(exp.right) +")"
 
     # integer expressions:
- 
+
     elif isinstance(exp, Add):
         return "(" + to_node_smt(exp.left) + " + " +to_node_smt(exp.right) +")"
-    
+
     elif isinstance(exp, Sub):
         return "(" + to_node_smt(exp.left) + " - " +to_node_smt(exp.right) +")"
-    
+
     elif isinstance(exp, Mul):
         return "(" + to_node_smt(exp.left) + " * " +to_node_smt(exp.right) +")"
-    
+
     elif isinstance(exp, Div):
         return "(" + to_node_smt(exp.left) + " / " +to_node_smt(exp.right) +")"
 
-    
+
     elif isinstance(exp, Pow):
         return "(" + to_node_smt(exp.left) + " ** " +to_node_smt(exp.right) +")"
 
     else:
-        assert False 
+        assert False
 
 def storageloc2node(loc: StorageLoc, time: Timing) -> str:
 
@@ -1083,14 +1171,14 @@ def storageloc2node(loc: StorageLoc, time: Timing) -> str:
 
         if isinstance(loc, VarLoc):
             return pref + loc.contract + "." + loc.name + ")"
-        
+
         elif isinstance(loc, MappingLoc):
             smt_args = []
             for elem in loc.args:
                 smt_args.append(to_node_smt(elem))
             func = storageloc2node(loc.loc, time)
-            return pref + func + ")(" + ", ".join(smt_args) + ")" 
-        
+            return pref + func + ")(" + ", ".join(smt_args) + ")"
+
         else:
             assert isinstance(loc, ContractLoc)
             collect_list_of_keys = [loc.field]

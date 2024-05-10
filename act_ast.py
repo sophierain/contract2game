@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Union, Generator
 
 
@@ -20,7 +20,7 @@ class Act:
             for nested_key, nested_value in value.items():
                 if isinstance(nested_value, ContractType):
                     not_main.append(nested_value.contract)
-        for c in self.contracts: 
+        for c in self.contracts:
             if c.name not in not_main:
                 yield c
 
@@ -63,7 +63,7 @@ class Constructor:
 
         cnf_inv = []
         for elem in self.invariants:
-            cnf_inv.extend(to_cnf(elem)) 
+            cnf_inv.extend(to_cnf(elem))
 
         self.preConditions = cnf_pre
         self.postConditions = cnf_post
@@ -96,7 +96,7 @@ class Behavior:
 
         cnf_updates = []
         for elem in self.stateUpdates:
-            cnf_updates.extend(to_cnf(elem)) 
+            cnf_updates.extend(to_cnf(elem))
 
         self.caseConditions = cnf_case
         self.preConditions = cnf_pre
@@ -130,8 +130,8 @@ Storage = Dict[str, Dict[str, SlotType]]
 # --- Mapping Types ---
 @dataclass
 class MappingType(SlotType):
-    argsType: List[ValueType] 
-    resultType: ValueType 
+    argsType: List[ValueType]
+    resultType: ValueType
 
 
 class ValueType(SlotType, metaclass=ABCMeta):
@@ -310,12 +310,12 @@ class ActByteStr(ActType):
 class Player(Exp):
     name: str
     constraints: List[Exp]
-    type: ActType = ActInt()
+    type: ActType = field(default_factory=ActInt)
 
     def copy_exp(self) -> Exp:
         print("WARNING: players should not be copied!")
         return self
-    
+
     def is_equiv(self, other: Exp) -> bool:
         return self == other
 
@@ -349,7 +349,7 @@ class Var(Exp):
         if self.name != other.name:
             return False
         return True
-    
+
     def copy_exp(self)-> Exp:
         return Var(self.name, self.type)
 
@@ -358,7 +358,7 @@ class And(Exp):
     """conjunction of two boolean expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, And):
@@ -370,7 +370,7 @@ class And(Exp):
         if not self.right.is_equiv(other.right):
             return False
         return True
-    
+
     def copy_exp(self)-> Exp:
         return And(self.left.copy_exp(), self.right.copy_exp(), self.type)
 
@@ -379,7 +379,7 @@ class Or(Exp):
     """disjunction of two boolean expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Or):
@@ -399,7 +399,7 @@ class Or(Exp):
 class Not(Exp):
     """Negation of a boolean expression"""
     value: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Not):
@@ -418,7 +418,7 @@ class Implies(Exp):
     """implication of two boolean expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Implies):
@@ -463,7 +463,7 @@ class ITE(Exp):
 class Eq(Exp):
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Eq):
@@ -491,7 +491,7 @@ class Eq(Exp):
 class Neq(Exp):
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Neq):
@@ -518,8 +518,8 @@ class Neq(Exp):
 @dataclass
 class InRange(Exp):
     expr: Exp
-    abitype: AbiType # only allow (int, uint, address, string) 
-    type: ActType = ActBool()
+    abitype: AbiType # only allow (int, uint, address, string)
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, InRange):
@@ -531,7 +531,7 @@ class InRange(Exp):
         if not self.abitype.is_equiv(other.abitype):
             return False
         return True
-    
+
     def copy_exp(self)-> Exp:
         return InRange(self.expr.copy_exp(), self.abitype, self.type)
 
@@ -542,7 +542,7 @@ class Add(Exp):
     """addition of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActInt()
+    type: ActType = field(default_factory=ActInt)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Add):
@@ -558,12 +558,12 @@ class Add(Exp):
     def copy_exp(self)-> Exp:
         return Add(self.left.copy_exp(), self.right.copy_exp(), self.type)
 
-@dataclass 
+@dataclass
 class Sub(Exp):
     """subtraction of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActInt()
+    type: ActType = field(default_factory=ActInt)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Sub):
@@ -585,7 +585,7 @@ class Mul(Exp):
     """multiplication of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActInt()
+    type: ActType = field(default_factory=ActInt)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Mul):
@@ -606,7 +606,7 @@ class Div(Exp):
     """division of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActInt()
+    type: ActType = field(default_factory=ActInt)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Div):
@@ -627,7 +627,7 @@ class Pow(Exp):
     """division of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActInt()
+    type: ActType = field(default_factory=ActInt)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Pow):
@@ -643,13 +643,13 @@ class Pow(Exp):
     def copy_exp(self)-> Exp:
         return Pow(self.left.copy_exp(), self.right.copy_exp(), self.type)
 
-# relations 
+# relations
 @dataclass
 class Lt(Exp):
     """less than comparison of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Lt):
@@ -678,7 +678,7 @@ class Le(Exp):
     """less than or equal comparison of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Le):
@@ -707,7 +707,7 @@ class Gt(Exp):
     """greater than comparison of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Gt):
@@ -736,7 +736,7 @@ class Ge(Exp):
     """greater than or equal comparison of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Ge):
@@ -762,7 +762,7 @@ class Ge(Exp):
 
 # --- environment Variables ---
 
-@dataclass  
+@dataclass
 class EnvVar(Exp):
     """A reference to an environment variable (e.g. msg.sender)"""
     name: str
@@ -781,8 +781,8 @@ class EnvVar(Exp):
         return EnvVar(self.name, self.type)
 
 
-@dataclass    
-class StorageItem(Exp): 
+@dataclass
+class StorageItem(Exp):
     """This is TItem in TimeAgnostic.hs"""
     loc: StorageLoc
     time: Timing
@@ -820,7 +820,7 @@ class StorageLoc(metaclass=ABCMeta):
 class VarLoc(StorageLoc):
     """The base variable reference type
        This can either be a value type, or the base of a longer chain of e.g. MappingLoc / ContractLoc expressions
-    """ 
+    """
     # the contract in which this storage location resides
     contract: str
     # the name of the storage location
@@ -838,10 +838,10 @@ class VarLoc(StorageLoc):
     def copy_loc(self) -> StorageLoc:
         return VarLoc(self.contract, self.name)
 
-@dataclass    
+@dataclass
 class MappingLoc(StorageLoc):
     """A fully applied lookup in a (potentially nested) mapping
-       e.g. m[4][3] 
+       e.g. m[4][3]
     """
     # the location in storage that holds the mapping (e.g. the m in m[4][3])
     loc: StorageLoc
@@ -859,11 +859,11 @@ class MappingLoc(StorageLoc):
             if not self.args[i].is_equiv(other.args[i]):
                 return False
         return True
-    
+
     def copy_loc(self) -> StorageLoc:
         return MappingLoc(self.loc.copy_loc(), [elem for elem in self.args])
 
-@dataclass    
+@dataclass
 class ContractLoc(StorageLoc):
     """A reference to a field on a contract that is held in storage
        e.g. c.x.y[3]
@@ -904,7 +904,7 @@ class Post(Timing):
 
 # History Variables
 @dataclass
-class HistItem(Exp): 
+class HistItem(Exp):
     """Storage item relative to its path"""
     loc: StorageLoc
     hist: List[str]
@@ -932,7 +932,7 @@ class HistItem(Exp):
         return HistItem(loc, hist, type)
 
 @dataclass
-class HistVar(Exp): 
+class HistVar(Exp):
     """Variable relative to its path"""
     name: str
     hist: List[str]
@@ -956,7 +956,7 @@ class HistVar(Exp):
         return HistVar(self.name, [elem for elem in self.hist], self.type)
 
 @dataclass
-class HistEnvVar(Exp): 
+class HistEnvVar(Exp):
     """environment variable relative to its path"""
     name: str
     hist: List[str]
@@ -1000,31 +1000,31 @@ def tocnf1(exp: Exp) -> Exp:
         return Or(tocnf1(exp.left), tocnf1(exp.right))
 
     elif isinstance(exp, Not):
-        return (Not(tocnf1(exp.value)))   
-        
+        return (Not(tocnf1(exp.value)))
+
     elif isinstance(exp, Implies):
         return Or(Not(tocnf1(exp.left)), tocnf1(exp.right))
 
-    elif isinstance(exp, ITE): 
+    elif isinstance(exp, ITE):
         return ITE(translate2cnf(exp.condition), translate2cnf(exp.left), translate2cnf(exp.right), exp.type)
 
-    elif isinstance(exp, Eq): 
+    elif isinstance(exp, Eq):
         return Eq(translate2cnf(exp.left), translate2cnf(exp.right))
 
-    elif isinstance(exp, Neq): 
+    elif isinstance(exp, Neq):
         return Neq(translate2cnf(exp.left), translate2cnf(exp.right))
 
-    else: 
+    else:
         assert new_atom(exp) or isinstance(exp, InRange)
         return base_case(exp)
-    
+
 def base_case(exp: Exp) -> Exp:
-    
+
     if exp.type != ActBool() and isinstance(exp, ITE):
         return ITE(translate2cnf(exp.condition), exp.left.copy_exp(),\
                    exp.right.copy_exp(), exp.type)
-    
-    elif isinstance(exp, InRange): 
+
+    elif isinstance(exp, InRange):
         if isinstance(InRange.abitype, AbiIntType):
             min = -2**(InRange.abitype.size -1)
             max = 2**(InRange.abitype.size -1) -1
@@ -1084,25 +1084,25 @@ def new_atom(exp: Exp) -> bool:
 
     if exp.type != ActBool():
         return True
-        
-    else: 
+
+    else:
         atom = isinstance(exp, Lit) or isinstance(exp, Var) or isinstance(exp, EnvVar) or isinstance(exp, StorageItem) or \
                 isinstance(exp, Le) or isinstance(exp, Lt) or isinstance(exp, Ge) or isinstance(exp, Gt) or \
-                isinstance(exp, Eq) or isinstance(exp, Neq) 
+                isinstance(exp, Eq) or isinstance(exp, Neq)
 
-        return atom  
+        return atom
 
 def new_lit(exp: Exp) -> bool:
     if new_atom(exp):
         return True
-    
+
     elif isinstance(exp, Not):
         assert new_atom(exp.value)
         return True
-    
+
     elif isinstance(exp, Or):
         return new_lit(exp.left) and new_lit(exp.right)
-    
+
     else:
         return False
 
@@ -1123,7 +1123,7 @@ def cnf2list(cnf: Exp) -> List[Exp]:
         return [cnf.copy_exp()]
     else:
         return cnf2list(cnf.left) + cnf2list(cnf.right)
-    
+
 
 
 
@@ -1132,11 +1132,11 @@ def cnf2list(cnf: Exp) -> List[Exp]:
 
 #     if is_atom(exp):
 #         return exp
-        
+
 #     else:
 #         if isinstance(exp, And):
 #             return And(cnf_exp(exp.left), cnf_exp(exp.right))
-        
+
 #         elif isinstance(exp, Or):
 #             if is_lit(exp): # literal is allowed to be a disj too (bc Or is defined to only have 2 args)
 #                 return exp
@@ -1150,8 +1150,8 @@ def cnf2list(cnf: Exp) -> List[Exp]:
 #                     return And(cnf_exp(Or(exp.left.left, exp.right)), cnf_exp(Or(exp.left.right, exp.right)))
 #                 else:
 #                     return cnf_exp(Or(cnf_exp(exp.left), exp.right))or isinstance(exp, InRange)
-#             if is_atom(exp.value):  
-#                 return exp  
+#             if is_atom(exp.value):
+#                 return exp
 #             else:
 #                 if isinstance(exp.value, And):
 #                     return cnf_exp(Or(Not(exp.value.left), Not(exp.value.right)))
@@ -1165,12 +1165,12 @@ def cnf2list(cnf: Exp) -> List[Exp]:
 #                     return cnf_exp(Eq(exp.value.left, exp.value.right))
 #                 else:
 #                     return cnf_exp(Not(cnf_exp(exp.value)))   # lazy version for inrange and ITE
-                
+
 #         elif isinstance(exp, Implies):
 #             return cnf_exp(Or(Not(exp.value.left), exp.value.right))
 
 #         # ??
-#         elif isinstance(exp, ITE): # translate the bool exp and ITEs into cnf 
+#         elif isinstance(exp, ITE): # translate the bool exp and ITEs into cnf
 #             passor isinstance(exp, InRange)
 #             pass
 #         else:
@@ -1181,8 +1181,8 @@ def cnf2list(cnf: Exp) -> List[Exp]:
 
 #     if exp.type != ActBool():
 #         return not isinstance(exp, ITE)
-        
-#     else: 
+
+#     else:
 
 #         # also consider eq neq with not bools an atom
 #         atom = isinstance(exp, Lit) or isinstance(exp, Var) or isinstance(exp, EnvVar) or isinstance(exp, StorageItem) or \
@@ -1198,13 +1198,13 @@ def cnf2list(cnf: Exp) -> List[Exp]:
 
 #     if is_atom(exp):
 #         return True
-    
+
 #     elif isinstance(exp, Not):
 #         return is_atom(exp.value)
-    
+
 #     elif isinstance(exp, Or):
 #         return is_lit(exp.left) and is_lit(exp.right)
-    
+
 #     else:
 #         return False
-    
+
