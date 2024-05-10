@@ -1,6 +1,9 @@
 from pest import *
 import itertools
 
+ADDRESS_MAX = (2**160) -1
+
+
 def is_dependent(constraints: List[Exp], interface: List[Exp],
                  hist: List[str], tree: Tree) \
                                                      -> Tuple[bool, Upstream | None, List[Exp] | None]:
@@ -52,14 +55,8 @@ def is_dependent(constraints: List[Exp], interface: List[Exp],
     for var in final_forall:
         if isinstance(var, Player):
             quant_players.append(var)
-    # add inrange preconditions for all quantified players
-    for player in quant_players:
-        prev_prec.append(Le(Lit(0, ActInt()), player))
-        prev_prec.append(Le(player, Lit((2**160) -1, ActInt())))
-    # add distinctness preconditions for all pairs of players
-    player_pairs = itertools.combinations(quant_players, 2)
-    for pair in player_pairs:
-        prev_prec.append(Neq(pair[0], pair[1]))
+    # add inrange and distinctness preconditions for all quantified players
+    prev_prec.extend(player_constraints(quant_players))
 
 
     # only proceed if there are problematic variables, otherwise trivially no case split required
@@ -104,9 +101,10 @@ def is_dependent(constraints: List[Exp], interface: List[Exp],
             split_location = []
             # pick longest history that is not the current one (cause we have to split above the current one)
             for cause in possible_split_causes:
-                assert isinstance(cause, HistEnvVar) or isinstance(cause, HistVar)
-                if len(cause.hist) > len(split_location) and len(cause.hist) < len(hist):
-                    split_location = cause.hist
+                if not isinstance(cause, Player):
+                    assert isinstance(cause, HistEnvVar) or isinstance(cause, HistVar)
+                    if len(cause.hist) > len(split_location) and len(cause.hist) < len(hist):
+                        split_location = cause.hist
 
 
 
@@ -208,7 +206,7 @@ def apply_tracker(exp: Exp, tree: Tree, history: List[str]) -> Tuple[Exp, List[E
         return exp, [exp], [exp]
     
     elif isinstance(exp, Player):
-        assert False, "player not expected in precondition"
+        return exp, [exp], [exp]
 
     elif isinstance(exp, And):
         left, l_var, lp_var = apply_tracker(exp.left, tree, history)
@@ -296,7 +294,7 @@ def walk_the_tree(tree: Tree, hist: List[str]) -> Tree:
         return tree
     
     else:
-        assert hist[0] in tree.children.keys(), "history behavior not found in tree"
+        assert hist[0] in tree.children.keys(), f"history behavior {hist[0]} not found in tree {tree.children.keys()}"
         return walk_the_tree(tree.children[hist[0]] ,hist[1:])
     
 
@@ -312,21 +310,22 @@ def compute_prev_prec(tree: Tree, forall_vars: List[Exp], forall_player_vars: Li
     additional_player_foralls =[]
 
     for forall_var in forall_vars:
-        assert isinstance(forall_var, HistVar) or isinstance(forall_var, HistEnvVar)
-        var_hist = forall_var.hist
-        # find preconditions at that hist, where the forall_var occurs
-        if len(starting_point_history) == len(var_hist):
-            continue
-        subtree = walk_the_tree(tree, starting_point_history[:len(var_hist)])
-        prev_prec = subtree.beh_case + subtree.preconditions
-        for prec in prev_prec:
-            # does forall_var occur here?
-            new_prec, new_var, new_p_var = apply_tracker(prec, tree, starting_point_history[:len(var_hist)])
-            # if it does occur we keep the precondition and the additional forall values
-            if forall_var in new_var:
-                additional_prec.append(new_prec)
-                additional_foralls.extend(new_var)
-                additional_player_foralls.extend(new_p_var)
+        assert isinstance(forall_var, HistVar) or isinstance(forall_var, HistEnvVar) or isinstance(forall_var, Player)
+        if not isinstance(forall_var, Player):
+            var_hist = forall_var.hist
+            # find preconditions at that hist, where the forall_var occurs
+            if len(starting_point_history) == len(var_hist):
+                continue
+            subtree = walk_the_tree(tree, starting_point_history[:len(var_hist)])
+            prev_prec = subtree.beh_case + subtree.preconditions + subtree.split_constraints
+            for prec in prev_prec:
+                # does forall_var occur here?
+                new_prec, new_var, new_p_var = apply_tracker(prec, tree, starting_point_history[:len(var_hist)])
+                # if it does occur we keep the precondition and the additional forall values
+                if forall_var in new_var:
+                    additional_prec.append(new_prec)
+                    additional_foralls.extend(new_var)
+                    additional_player_foralls.extend(new_p_var)
 
     # remove doubles
     remove_doubles(additional_foralls)
@@ -347,3 +346,19 @@ def compute_prev_prec(tree: Tree, forall_vars: List[Exp], forall_player_vars: Li
 
     return additional_foralls + rec_forall, additional_player_foralls + rec_p_forall, additional_prec + rec_prec
 
+
+def player_constraints(players: Player) -> List[Exp]:
+    """computes all inrange constraints and distinctness constraints for players"""
+    constraints = []
+    global ADDRESS_MAX
+
+    # add inrange constraints
+    for player in players:
+        constraints.append(Le(Lit(0, ActInt()), player))
+        constraints.append(Le(player, Lit(ADDRESS_MAX, ActInt())))
+    # add distinctness constraints for all pairs of players
+    player_pairs = itertools.combinations(players, 2)
+    for pair in player_pairs:
+        constraints.append(Neq(pair[0], pair[1]))
+
+    return constraints

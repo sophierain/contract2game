@@ -55,12 +55,7 @@ def add_ignore(tree: Tree, hist: List[str]):
     split_constraints = []
     smt_constraints = []
 
-    # beh_case = [align_hist(exp, hist) for exp in tree.beh_case]
-    # preconditions = [align_hist(exp, hist) for exp in tree.preconditions]
-    # updates = [align_hist(exp, hist) for exp in tree.updates]
-    # split_constraints = [align_hist(exp, hist) for exp in tree.split_constraints]
-    # probably also off by 1
-    # smt_constraints = [boo for boo in tree.smt_constraints]
+
 
 
     assert "ignore" not in tree.children.keys()
@@ -77,7 +72,6 @@ def align_children(tree: Tree, hist: List[str]) -> Tree:
     preconditions = [align_hist(exp, hist) for exp in tree.preconditions]
     updates = [align_hist(exp, hist) for exp in tree.updates]
     split_constraints = [align_hist(exp, hist) for exp in tree.split_constraints]
-    # probably also off by 1, not to be adapted?
     smt_constraints = [boo for boo in tree.smt_constraints]
     interface = [align_hist(exp, hist) for exp in tree.interface]
 
@@ -312,18 +306,6 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
                   players: List[Player], hist: List[str], player_hist: List[Player]):
     """modifies state tree to be player enhanced and support ignore-actions  
     ensures step 1.3 of the read me"""   
-
-    # init: player_smt = []
-    #       state_tree = entire tree
-    #       players = original order
-    #       hist = []
-    # print("\n")
-    # state_tree.structure()
-    # print([p.name for p in player_hist])
-    # print(players[0].name)
-
-    
-
 
     # check breaking conditions:
 

@@ -306,7 +306,18 @@ class ActByteStr(ActType):
     """act bytestring type"""
 
 
+@dataclass
+class Player(Exp):
+    name: str
+    constraints: List[Exp]
+    type: ActType = ActInt()
 
+    def copy_exp(self) -> Exp:
+        print("WARNING: players should not be copied!")
+        return self
+    
+    def is_equiv(self, other: Exp) -> bool:
+        return self == other
 
 @dataclass
 class Lit(Exp):
@@ -466,7 +477,15 @@ class Eq(Exp):
         return True
 
     def copy_exp(self)-> Exp:
-        return Eq(self.left.copy_exp(), self.right.copy_exp(), self.type)
+        if isinstance(self.left, Player):
+            left = self.left
+        else:
+            left = self.left.copy_exp()
+        if isinstance(self.right, Player):
+            right = self.right
+        else:
+            right = self.right.copy_exp()
+        return Eq(left, right, self.type)
 
 @dataclass
 class Neq(Exp):
@@ -486,7 +505,15 @@ class Neq(Exp):
         return True
 
     def copy_exp(self)-> Exp:
-        return Neq(self.left.copy_exp(), self.right.copy_exp(), self.type) 
+        if isinstance(self.left, Player):
+            left = self.left
+        else:
+            left = self.left.copy_exp()
+        if isinstance(self.right, Player):
+            right = self.right
+        else:
+            right = self.right.copy_exp()
+        return Neq(left, right, self.type)
 
 @dataclass
 class InRange(Exp):
@@ -636,7 +663,15 @@ class Lt(Exp):
         return True
 
     def copy_exp(self)-> Exp:
-        return Lt(self.left.copy_exp(), self.right.copy_exp(), self.type)
+        if isinstance(self.left, Player):
+            left = self.left
+        else:
+            left = self.left.copy_exp()
+        if isinstance(self.right, Player):
+            right = self.right
+        else:
+            right = self.right.copy_exp()
+        return Lt(left, right, self.type)
 
 @dataclass
 class Le(Exp):
@@ -657,7 +692,15 @@ class Le(Exp):
         return True
 
     def copy_exp(self)-> Exp:
-        return Le(self.left.copy_exp(), self.right.copy_exp(), self.type)
+        if isinstance(self.left, Player):
+            left = self.left
+        else:
+            left = self.left.copy_exp()
+        if isinstance(self.right, Player):
+            right = self.right
+        else:
+            right = self.right.copy_exp()
+        return Le(left, right, self.type)
 
 @dataclass
 class Gt(Exp):
@@ -678,7 +721,15 @@ class Gt(Exp):
         return True
 
     def copy_exp(self)-> Exp:
-        return Gt(self.left.copy_exp(), self.right.copy_exp(), self.type)
+        if isinstance(self.left, Player):
+            left = self.left
+        else:
+            left = self.left.copy_exp()
+        if isinstance(self.right, Player):
+            right = self.right
+        else:
+            right = self.right.copy_exp()
+        return Gt(left, right, self.type)
 
 @dataclass
 class Ge(Exp):
@@ -699,7 +750,15 @@ class Ge(Exp):
         return True
 
     def copy_exp(self)-> Exp:
-        return Ge(self.left.copy_exp(), self.right.copy_exp(), self.type)
+        if isinstance(self.left, Player):
+            left = self.left
+        else:
+            left = self.left.copy_exp()
+        if isinstance(self.right, Player):
+            right = self.right
+        else:
+            right = self.right.copy_exp()
+        return Ge(left, right, self.type)
 
 # --- environment Variables ---
 

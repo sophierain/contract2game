@@ -47,7 +47,7 @@ for tree in act_trees:
 
 # apply case splitting algorithm to all trees
 for tree in act_trees:
-       case_split(tree, [], tree, players)
+       _ = case_split(tree, [], tree, players)
 
 
 

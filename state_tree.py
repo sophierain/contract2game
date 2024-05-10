@@ -76,18 +76,6 @@ class TrackerElem:
 
 Tracker = List[TrackerElem]
 
-@dataclass
-class Player(Exp):
-    name: str
-    constraints: List[Exp]
-    type: ActType = ActInt()
-
-    def copy_exp(self) -> Exp:
-        print("WARNING: players should not be copied!")
-        return self
-    
-    def is_equiv(self, other: Exp) -> bool:
-        return self == other
 
 @dataclass
 class Tree:
@@ -148,20 +136,22 @@ class Tree:
     def copy(self) -> 'Tree':
         player = self.player
         tracker = copy_tracker(self.tracker)
-        beh_case = [exp for exp in self.beh_case]
-        preconditions = [exp for exp in self.preconditions]
-        updates = [exp for exp in self.updates]
-        split_constraints = [exp for exp in self.split_constraints]
+        beh_case = [exp.copy_exp() for exp in self.beh_case]
+        preconditions = [exp.copy_exp() for exp in self.preconditions]
+        updates = [exp.copy_exp() for exp in self.updates]
+        split_constraints = [exp.copy_exp() for exp in self.split_constraints]
         smt_constraints = [boo for boo in self.smt_constraints]
         children: Dict[str, Tree] = dict()
         for key, value in self.children.items():
             children[key] = value.copy()
-        interface: List[Exp] = [var for var in self.interface]
+        interface: List[Exp] = [var.copy_exp() for var in self.interface]
 
         return Tree(player, tracker, beh_case, preconditions, updates, split_constraints, 
                     children, smt_constraints, interface)
         
-
+    def add_child(self, child: 'Tree', name: str):
+        assert name not in self.children.keys()
+        self.children[name] = child
 
 # main functions
 
