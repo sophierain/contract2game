@@ -989,7 +989,7 @@ def to_storage_label(contract: str, name: str) -> str:
 
 def to_node_name(case: List[Exp])-> str:
 
-    smt_case = [str(to_node_smt(elem)) for elem in case]
+    smt_case = [elem.to_string() for elem in case]
     name = ", ".join(smt_case)
     return name
 

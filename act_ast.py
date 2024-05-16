@@ -290,6 +290,10 @@ class Exp(metaclass=ABCMeta):
     def copy_exp(self) -> Exp:
         pass
 
+    @abstractmethod
+    def to_string(self) -> str:
+        pass
+
 class ActType(metaclass=ABCMeta):
     """Base class for act types"""
 
@@ -318,6 +322,9 @@ class Player(Exp):
     
     def is_equiv(self, other: Exp) -> bool:
         return self == other
+    
+    def to_string(self) -> str:
+        return self.name
 
 @dataclass
 class Lit(Exp):
@@ -335,6 +342,9 @@ class Lit(Exp):
 
     def copy_exp(self)-> Exp:
         return Lit(self.value, self.type)
+    
+    def to_string(self) -> str:
+        return str(self.value)
 
 @dataclass
 class Var(Exp):
@@ -352,6 +362,9 @@ class Var(Exp):
     
     def copy_exp(self)-> Exp:
         return Var(self.name, self.type)
+    
+    def to_string(self) -> str:
+        return self.name
 
 @dataclass
 class And(Exp):
@@ -373,6 +386,9 @@ class And(Exp):
     
     def copy_exp(self)-> Exp:
         return And(self.left.copy_exp(), self.right.copy_exp(), self.type)
+    
+    def to_string(self) -> str:
+        return "And(" + self.left.to_string() + "," + self.right.to_string() + ")" 
 
 @dataclass
 class Or(Exp):
@@ -394,6 +410,9 @@ class Or(Exp):
 
     def copy_exp(self)-> Exp:
         return Or(self.left.copy_exp(), self.right.copy_exp(), self.type)
+    
+    def to_string(self) -> str:
+        return "Or(" + self.left.to_string() + "," + self.right.to_string() + ")" 
 
 @dataclass
 class Not(Exp):
@@ -412,6 +431,9 @@ class Not(Exp):
 
     def copy_exp(self)-> Exp:
         return Not(self.value.copy_exp(), self.type)
+    
+    def to_string(self) -> str:
+        return "Not(" + self.value.to_string() + ")" 
 
 @dataclass
 class Implies(Exp):
@@ -433,6 +455,9 @@ class Implies(Exp):
 
     def copy_exp(self)-> Exp:
         return Implies(self.left.copy_exp(), self.right.copy_exp(), self.type)
+    
+    def to_string(self) -> str:
+        return "Implies(" + self.left.to_string() + "," + self.right.to_string() + ")" 
 
 @dataclass
 class ITE(Exp):
@@ -457,6 +482,9 @@ class ITE(Exp):
 
     def copy_exp(self)-> Exp:
         return ITE(self.condition.copy_exp(), self.left.copy_exp(), self.right.copy_exp(), self.type)
+
+    def to_string(self) -> str:
+        return "ITE(" + self.condition.to_string() + "," + self.left.to_string() + "," + self.right.to_string() + ")" 
 
 
 @dataclass
@@ -487,6 +515,9 @@ class Eq(Exp):
             right = self.right.copy_exp()
         return Eq(left, right, self.type)
 
+    def to_string(self) -> str:
+        return "Eq(" + self.left.to_string() + "," + self.right.to_string() + ")" 
+
 @dataclass
 class Neq(Exp):
     left: Exp
@@ -515,6 +546,9 @@ class Neq(Exp):
             right = self.right.copy_exp()
         return Neq(left, right, self.type)
 
+    def to_string(self) -> str:
+        return "Neq(" + self.left.to_string() + "," + self.right.to_string() + ")" 
+
 @dataclass
 class InRange(Exp):
     expr: Exp
@@ -535,6 +569,8 @@ class InRange(Exp):
     def copy_exp(self)-> Exp:
         return InRange(self.expr.copy_exp(), self.abitype, self.type)
 
+    def to_string(self) -> str:
+        assert False, "inrange constraints should not occur here"
 
 # arithmetic
 @dataclass
@@ -558,6 +594,9 @@ class Add(Exp):
     def copy_exp(self)-> Exp:
         return Add(self.left.copy_exp(), self.right.copy_exp(), self.type)
 
+    def to_string(self) -> str:
+        return "Add(" + self.left.to_string() + "," + self.right.to_string() + ")" 
+
 @dataclass 
 class Sub(Exp):
     """subtraction of two integer expressions"""
@@ -579,6 +618,8 @@ class Sub(Exp):
     def copy_exp(self)-> Exp:
         return Sub(self.left.copy_exp(), self.right.copy_exp(), self.type)
 
+    def to_string(self) -> str:
+        return "Sub(" + self.left.to_string() + "," + self.right.to_string() + ")" 
 
 @dataclass
 class Mul(Exp):
@@ -601,6 +642,9 @@ class Mul(Exp):
     def copy_exp(self)-> Exp:
         return Mul(self.left.copy_exp(), self.right.copy_exp(), self.type)
 
+    def to_string(self) -> str:
+        return "Mul(" + self.left.to_string() + "," + self.right.to_string() + ")" 
+
 @dataclass
 class Div(Exp):
     """division of two integer expressions"""
@@ -621,6 +665,9 @@ class Div(Exp):
 
     def copy_exp(self)-> Exp:
         return Div(self.left.copy_exp(), self.right.copy_exp(), self.type)
+    
+    def to_string(self) -> str:
+        return "Div(" + self.left.to_string() + "," + self.right.to_string() + ")" 
 
 @dataclass
 class Pow(Exp):
@@ -642,6 +689,9 @@ class Pow(Exp):
 
     def copy_exp(self)-> Exp:
         return Pow(self.left.copy_exp(), self.right.copy_exp(), self.type)
+    
+    def to_string(self) -> str:
+        return "Pow(" + self.left.to_string() + "," + self.right.to_string() + ")" 
 
 # relations 
 @dataclass
@@ -673,6 +723,9 @@ class Lt(Exp):
             right = self.right.copy_exp()
         return Lt(left, right, self.type)
 
+    def to_string(self) -> str:
+        return "Lt(" + self.left.to_string() + "," + self.right.to_string() + ")" 
+    
 @dataclass
 class Le(Exp):
     """less than or equal comparison of two integer expressions"""
@@ -701,6 +754,9 @@ class Le(Exp):
         else:
             right = self.right.copy_exp()
         return Le(left, right, self.type)
+    
+    def to_string(self) -> str:
+        return "Le(" + self.left.to_string() + "," + self.right.to_string() + ")" 
 
 @dataclass
 class Gt(Exp):
@@ -731,6 +787,9 @@ class Gt(Exp):
             right = self.right.copy_exp()
         return Gt(left, right, self.type)
 
+    def to_string(self) -> str:
+        return "Gt(" + self.left.to_string() + "," + self.right.to_string() + ")" 
+
 @dataclass
 class Ge(Exp):
     """greater than or equal comparison of two integer expressions"""
@@ -759,6 +818,10 @@ class Ge(Exp):
         else:
             right = self.right.copy_exp()
         return Ge(left, right, self.type)
+    
+
+    def to_string(self) -> str:
+        return "Ge(" + self.left.to_string() + "," + self.right.to_string() + ")" 
 
 # --- environment Variables ---
 
@@ -779,6 +842,9 @@ class EnvVar(Exp):
 
     def copy_exp(self)-> Exp:
         return EnvVar(self.name, self.type)
+    
+    def to_string(self) -> str:
+        return self.name
 
 
 @dataclass    
@@ -801,6 +867,15 @@ class StorageItem(Exp):
 
     def copy_exp(self)-> Exp:
         return StorageItem(self.loc.copy_loc(), self.time, self.type)
+    
+    def to_string(self) -> str:
+
+        if self.time == Pre():
+            time = "Pre"
+        else:
+            time = "Post"
+
+        return time + "(" + self.loc.to_string() + ")"
 
 # --- Storage Location ---
 
@@ -813,6 +888,10 @@ class StorageLoc(metaclass=ABCMeta):
 
     @abstractmethod
     def copy_loc(self) -> StorageLoc:
+        pass
+
+    @abstractmethod
+    def to_string(self) -> str:
         pass
 
 
@@ -837,6 +916,9 @@ class VarLoc(StorageLoc):
 
     def copy_loc(self) -> StorageLoc:
         return VarLoc(self.contract, self.name)
+    
+    def to_string(self) -> str:
+        return self.contract + "." + self.name
 
 @dataclass    
 class MappingLoc(StorageLoc):
@@ -863,6 +945,14 @@ class MappingLoc(StorageLoc):
     def copy_loc(self) -> StorageLoc:
         return MappingLoc(self.loc.copy_loc(), [elem for elem in self.args])
 
+    def to_string(self) -> str:
+        arguments = ""
+        for elem in self.args:
+            arguments = arguments + "," + elem.to_string
+        if len(arguments) > 0:
+            arguments = arguments[1:]
+        return self.loc.to_string() + "(" + arguments + ")"
+
 @dataclass    
 class ContractLoc(StorageLoc):
     """A reference to a field on a contract that is held in storage
@@ -888,6 +978,9 @@ class ContractLoc(StorageLoc):
 
     def copy_loc(self) -> StorageLoc:
         return ContractLoc(self.loc.copy_loc(), self.contract, self.field)
+
+    def to_string(self) -> str:
+        return self.loc.to_string() + "." + self.field
 
 class Timing(metaclass=ABCMeta):
     """Is the storage varaible refering to the pre or post state"""
@@ -931,6 +1024,14 @@ class HistItem(Exp):
 
         return HistItem(loc, hist, type)
 
+    def to_string(self) -> str:
+        hist = ""
+        for elem in self.hist:
+            hist = hist + "," + elem
+        if len(hist) > 0:
+            hist = hist[1:]
+        return self.loc.to_string() + "@(" + hist + ")"
+
 @dataclass
 class HistVar(Exp): 
     """Variable relative to its path"""
@@ -955,6 +1056,14 @@ class HistVar(Exp):
     def copy_exp(self)-> Exp:
         return HistVar(self.name, [elem for elem in self.hist], self.type)
 
+    def to_string(self) -> str:
+        hist = ""
+        for elem in self.hist:
+            hist = hist + "," + elem
+        if len(hist) > 0:
+            hist = hist[1:]
+        return self.name + "@(" + hist + ")"
+
 @dataclass
 class HistEnvVar(Exp): 
     """environment variable relative to its path"""
@@ -978,6 +1087,14 @@ class HistEnvVar(Exp):
 
     def copy_exp(self)-> Exp:
         return HistEnvVar(self.name, [elem for elem in self.hist], self.type)
+
+    def to_string(self) -> str:
+        hist = ""
+        for elem in self.hist:
+            hist = hist + "," + elem
+        if len(hist) > 0:
+            hist = hist[1:]
+        return self.name + "@(" + hist + ")"
 
 # all cnf functions
 

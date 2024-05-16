@@ -16,14 +16,20 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
 
     else:
         # change to a while loop and remove the dictionary from the condition
-        for child, child_tree in tree.children.items():
+        iteration_list = [[child, child_tree] for child, child_tree in tree.children.items()]
+        i = 0
+
+        while i < len(iteration_list):
+            child = iteration_list[i][0]
+            child_tree = iteration_list[i][1]
             # call recursion first to proceed bottom up
             new_hist_incl_child = case_split(child_tree, new_hist + [child], entire_tree, players)
             new_hist = new_hist_incl_child[:-1]
             new_child = new_hist_incl_child[-1]
             # KIM: take care of upstream beh.
             # KIM: repeat for preconditions
-            print(new_hist_incl_child)
+            # print("next history")
+            # print(new_hist_incl_child)
             # if a split is required, "split" is true
             # is dependent returns a possible case_splitting point candidate, which still has to be checked
             split, splitting_point_candidate, case_condition = is_dependent(child_tree.beh_case + child_tree.preconditions,\
@@ -38,8 +44,8 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
                     good_split = check_splitting_point(splitting_point, case_condition, entire_tree, players, new_hist_incl_child)
 
                 if good_split:
-                    print("splitting point")
-                    print(splitting_point)
+                    # print("splitting point")
+                    # print(splitting_point)
 
                     # compute the condition to be added to the splitting point node (i.e. remove player in range constraints and
                     # formulae equiv to preconditions of the splitting point)
@@ -50,8 +56,13 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
                     relative_dep_history = hist[len(splitting_point):] + [new_child]
                     child_neg = copy_subtree_without_dep_behav(walk_the_tree(entire_tree, splitting_point), relative_dep_history)
                     child_pos = walk_the_tree(entire_tree, splitting_point)
-                    child_name_neg = splitting_point[-1] + "_NOT(" + str(split_constraint) + ")"
-                    child_name_pos = splitting_point[-1] + "_" + str(split_constraint)
+                    name_addendum = ""
+                    assert len(split_constraint) > 0 
+                    for exp in split_constraint:
+                        name_addendum = name_addendum + "_" + exp.to_string()
+                    name_addendum = name_addendum[1:]
+                    child_name_neg = splitting_point[-1] + '_NOT(' + name_addendum + ')'
+                    child_name_pos = splitting_point[-1] + '_' + name_addendum
 
                     # add contraints to split_constraints
                     child_neg.split_constraints.append(Not(conjoin(split_constraint)))
@@ -69,12 +80,36 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
                     subtree.add_child(child_neg, child_name_neg) # add the child_neg as a sibling of the splitting_point
 
                     # entire_tree.structure()
+                    # print(child_name_pos)
                     new_hist = splitting_point[:-1] + [child_name_pos] + new_hist[len(splitting_point):]
                  
                 else: # implement this later
                     print("Warning: need another tree")
                     # for now just in the split conditions of the root
                     entire_tree.split_constraints.extend(case_condition)
+            
+            
+            # rename current child accordingly in iteration_list, s.t. in the future not added
+            iteration_list[i][0] = new_child
+
+            # check which children are new and append these to iteration list
+            to_add = []
+            for child, child_tree in tree.children.items():
+                is_eq = [child == elem[0] for elem in iteration_list]
+                if not any(is_eq):
+                    # print("new_hist")
+                    # print(new_hist)
+                    # print("child")
+                    # print(child)
+                    # print("new_child")
+                    # print(new_child)
+                    # print("iteration_list")
+                    # print([elem[0] for elem in iteration_list])
+                    to_add.append([child, child_tree])
+
+
+            iteration_list.extend(to_add)
+            i = i+1
 
         return new_hist
 
