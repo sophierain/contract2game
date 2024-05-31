@@ -3,6 +3,204 @@ from state_tree import *
 
 
 
+def adapt_tree(hist: List[str], name: str, tree: Tree):
+    """ 
+    aligns the history expressions and tracker elements according to the new name 'name'. 
+    The last entry of hist is the old name of the branch leading to tree.
+    e.g. hist: ["a", "b"], name "b_new", tree is the subtree after choices "a", then "b"
+
+    modifies the tree such that it contains the correct new name of the choice
+    """
+    # player names not listed in histitems, hence restruct hist accordingly
+    # no_player_hist = []
+    # for elem in hist:
+    #     assert len(elem.split("("))>= 2, elem
+    #     assert len(elem.split(")"))>= 2, elem
+    #     first_part = elem.split("(")[0]
+    #     second_part = elem[len(elem.split(")")[0])+1:]
+    #     no_player_hist.append(first_part + second_part)
+
+    # assert len(name.split("("))>= 2, name
+    # assert len(name.split(")"))>= 2, name
+    # first_part = name.split("(")[0]
+    # second_part = name[len(name.split(")")[0])+1:]
+    # no_player_name =(first_part + second_part)
+
+    tree.tracker = adapt_tracker(hist, name, tree.tracker)
+    tree.beh_case = [adapt_hist(hist, name, exp) for exp in tree.beh_case]
+    tree.preconditions = [adapt_hist(hist, name, exp) for exp in tree.preconditions]
+    tree.updates = [adapt_hist(hist, name, exp) for exp in tree.updates]
+    tree.split_constraints = [adapt_hist(hist, name, exp) for exp in tree.split_constraints]
+    for child in tree.children.keys():
+        adapt_tree(hist, name, tree.children[child])
+    # smt_constraints no longer used
+    tree.smt_constraints = [] 
+    tree.interface = [adapt_hist(hist, name, exp) for exp in tree.interface]
+    return 
+
+def adapt_hist(hist: List[str], name: str, exp: Exp) -> Exp:
+    """
+    changes the old name hist[-1] to the new_name name in exp, if it is a hist item younger or equal to hist 
+    """
+
+    if isinstance(exp, HistItem):
+        loc: StorageLoc
+        # take care of loc for mappings
+        if isinstance(exp.loc, MappingLoc):
+            loc = MappingLoc(exp.loc.loc.copy_loc(), [adapt_hist(hist, name, elem) for elem in exp.loc.args])
+        else:
+            loc = exp.loc.copy_loc()
+
+
+        if len(hist) > len(exp.hist):
+            for i in range(len(exp.hist)):
+                assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
+            new_hist = exp.hist
+        else:
+            for i in range(len(hist)):
+                assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
+            new_hist = hist[:-1] + [name] + exp.hist[len(hist):]
+
+        return HistItem(loc, new_hist, exp.type)
+
+    elif isinstance(exp, Lit):
+        return exp.copy_exp()
+    
+    elif isinstance(exp, HistVar):
+
+        if len(hist) > len(exp.hist):
+            for i in range(len(exp.hist)):
+                assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
+            new_hist = exp.hist
+        else:
+            for i in range(len(hist)):
+                assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
+            new_hist = hist[:-1] + [name] + exp.hist[len(hist):]
+        return HistVar(exp.name, new_hist, exp.type)
+    
+    elif isinstance(exp, HistEnvVar):
+
+        if len(hist) > len(exp.hist):
+            for i in range(len(exp.hist)):
+                assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
+            new_hist = exp.hist
+        else:
+            for i in range(len(hist)):
+                assert hist[i] == exp.hist[i], f"{hist} vs {exp.hist}"
+            new_hist = hist[:-1] + [name] + exp.hist[len(hist):]
+        return HistEnvVar(exp.name, new_hist, exp.type)
+    
+    elif isinstance(exp, Player):
+        return exp
+
+    elif isinstance(exp, And):
+        left = adapt_hist(hist, name, exp.left)
+        right = adapt_hist(hist, name, exp.right)
+        return And(left, right)
+    
+    elif isinstance(exp, Or):
+        left = adapt_hist(hist, name, exp.left)
+        right = adapt_hist(hist, name, exp.right)
+        return Or(left, right) 
+
+    elif isinstance(exp, Not):
+        value = adapt_hist(hist, name, exp.value)
+        return Not(value)
+    
+    elif isinstance(exp, ITE):
+        condition = adapt_hist(hist, name, exp.condition)
+        left = adapt_hist(hist, name, exp.left)
+        right = adapt_hist(hist, name, exp.right)
+        return ITE(condition, left, right, exp.type)
+
+    elif isinstance(exp, Eq):
+        left = adapt_hist(hist, name, exp.left)
+        right = adapt_hist(hist, name, exp.right)
+        return Eq(left, right) 
+    
+    elif isinstance(exp, Neq):
+        left = adapt_hist(hist, name, exp.left)
+        right = adapt_hist(hist, name, exp.right)
+        return Neq(left, right) 
+    
+    elif isinstance(exp, Add):
+        left = adapt_hist(hist, name, exp.left)
+        right = adapt_hist(hist, name, exp.right)
+        return Add(left, right) 
+
+    elif isinstance(exp, Sub):
+        left = adapt_hist(hist, name, exp.left)
+        right = adapt_hist(hist, name, exp.right)
+        return Sub(left, right) 
+    
+    elif isinstance(exp, Mul):
+        left = adapt_hist(hist, name, exp.left)
+        right = adapt_hist(hist, name, exp.right)
+        return Mul(left, right) 
+    
+    elif isinstance(exp, Div):
+        left = adapt_hist(hist, name, exp.left)
+        right = adapt_hist(hist, name, exp.right)
+        return Div(left, right) 
+    
+    elif isinstance(exp, Pow):
+        left = adapt_hist(hist, name, exp.left)
+        right = adapt_hist(hist, name, exp.right)
+        return Pow(left, right) 
+    
+    elif isinstance(exp, Lt):
+        left = adapt_hist(hist, name, exp.left)
+        right = adapt_hist(hist, name, exp.right)
+        return Lt(left, right) 
+    
+    elif isinstance(exp, Le):
+        left = adapt_hist(hist, name, exp.left)
+        right = adapt_hist(hist, name, exp.right)
+        return Le(left, right) 
+    
+    elif isinstance(exp, Gt):
+        left = adapt_hist(hist, name, exp.left)
+        right = adapt_hist(hist, name, exp.right)
+        return Gt(left, right) 
+    
+    elif isinstance(exp, Ge):
+        left = adapt_hist(hist, name, exp.left)
+        right = adapt_hist(hist, name, exp.right)
+        return Ge(left, right) 
+
+    else: 
+        # shouldn't see any implies nor inrange at this point (CNF)
+        assert False, "unexpected Exp type"
+
+def adapt_tracker(tracker_hist: List[str], name: str, tracker: Tracker) -> Tracker:
+    """
+    if upstream younger or equal to hist, change name of hist[-1] to name
+    fresh instances of item and upstream as those can change in a tracker;
+    value is shallowly assigned 
+    """
+
+    # tracker_hist = []
+    # for elem in hist:
+    #     assert len(elem.split("(")) == 2 
+    #     assert len(elem.split(")")) == 2 
+    #     tracker_hist.append(elem.split("(")[0] + elem.split(")")[1])
+
+    new_tracker: Tracker = []
+
+    for elem in tracker:
+        new_item = adapt_hist(tracker_hist, name, elem.item)
+        assert isinstance(new_item, HistItem | HistEnvVar)
+        if len(elem.upstream) < len(tracker_hist):
+            assert all([tracker_hist[i] == elem.upstream[i] for i in range(len(elem.upstream))] )
+            new_upstream = elem.upstream
+        else:
+            assert all([tracker_hist[i] == elem.upstream[i] for i in range(len(tracker_hist))] )
+            new_upstream = tracker_hist[:-1] + [name] + elem.upstream[len(tracker_hist):]
+        new_value = adapt_hist(tracker_hist, name, elem.value)
+        new_tracker.append(TrackerElem(new_item, new_value, new_upstream))
+
+    return new_tracker
+
 
 def contract2pest(contract: Contract, extra_constraints: List[Exp], \
                   store: Storage, players: List[Player]) -> Tree:
@@ -319,7 +517,7 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
     # last player-many actions in history only contain ignore nodes
     if len(hist) >= len(players):
         last_actions = hist[-len(players):]
-        if all(elem == "ignore" for elem in last_actions):
+        if all(elem.split("(")[0] == "ignore" for elem in last_actions):
             state_tree.children = dict()
             return
 
@@ -334,6 +532,14 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
     new_players.append(current_player)
 
     state_tree.player = current_player
+    # at root we fix the first player according to the ordered list, hence there is nothing to adapt
+    if hist != []:
+        old_name_split = hist[-1].split("(")
+        assert len(old_name_split) == 2
+        old_name = old_name_split[0]
+        old_hist = hist[:-1] + [old_name]
+        adapt_tree(old_hist, hist[-1], state_tree)
+
 
     add_ignore(state_tree, hist)
 
@@ -378,7 +584,7 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
                     child_players = [elem for elem in new_players]
                     child_players.remove(p)
                     generate_pest(player_smt + [new_smt], to_add[-1][1],
-                                   [p] + child_players, hist + [child], player_hist + [current_player])
+                                   [p] + child_players, hist + [child_name], player_hist + [current_player])
     for child in to_delete:
         del state_tree.children[child]
     for child, child_pest in to_add:
@@ -435,10 +641,8 @@ def generate_pest(player_smt: List[Boolean], state_tree: Tree,
                         child_players = [elem for elem in new_players]
                         child_players.remove(p)
                         generate_pest(player_smt + [new_smt], state_tree.children[child_name], \
-                                    [p] + child_players, hist + [child], player_hist + [current_player])
+                                    [p] + child_players, hist + [child_name], player_hist + [current_player])
 
     else:
         # print("ignore was the only child")
         del state_tree.children["ignore"]
-
-

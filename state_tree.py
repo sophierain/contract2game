@@ -94,6 +94,13 @@ class Tree:
     smt_constraints: List[Boolean]
     interface: List[Exp]
 
+    def add_player_in_hists(self, current_hist: List[str]):
+        
+        player = self.player
+        assert isinstance(player, Player)
+        # should be same as what I'm doing for case splits
+
+
     def __repr__(self, level = 0) -> str:  # to be adapted, prettify printing of trackerelem and exp
         
         indent = "   "*level
