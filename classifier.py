@@ -6,7 +6,7 @@ ADDRESS_MAX = (2**160) -1
 
 def is_dependent(constraints: List[Exp], interface: List[Exp],
                  hist: List[str], tree: Tree) \
-                                                     -> Tuple[bool, Upstream | None, List[Exp] | None]:
+                                                     -> Tuple[bool, List[str] | None, List[Exp] | None]:
     """takes the list of preconditons (and case_conditions) as "constraints", the interface of the current function "interface",
         the current history to the node in the tree "hist" and the entire tree "tree"
         the function computes whether the constraints can ever be falsified by previous players and their choice of parameter.

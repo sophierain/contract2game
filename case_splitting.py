@@ -35,8 +35,8 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
             split, splitting_point_candidate, case_condition = is_dependent(child_tree.beh_case + child_tree.preconditions,\
                                             child_tree.interface, new_hist_incl_child, entire_tree)
             if split:
-                assert splitting_point_candidate
-                assert case_condition
+                assert isinstance(splitting_point_candidate, List)
+                assert isinstance(case_condition, List)
                 # we check if the case splitting point is the correct one
                 good_split = check_splitting_point(splitting_point_candidate, case_condition, entire_tree, players, new_hist_incl_child)
                 splitting_point = splitting_point_candidate
@@ -52,7 +52,7 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
                     # compute the condition to be added to the splitting point node (i.e. remove player in range constraints and
                     # formulae equiv to preconditions of the splitting point)
                     split_constraint = compute_split_constraint(splitting_point, case_condition, entire_tree, players)
-                    
+                    split_constraint = remove_trivial_conditions(split_constraint) 
 
                     # copy the subtree after splitting_point, the original one tagged condition, the new one tagged not conditon
                     relative_dep_history = hist[len(splitting_point):] + [new_child]
@@ -439,3 +439,18 @@ def adapt_tracker(tracker_hist: List[str], name: str, tracker: Tracker) -> Track
         new_tracker.append(TrackerElem(new_item, new_value, new_upstream))
 
     return new_tracker
+
+
+def remove_trivial_conditions(constraints: List[Exp]) -> List[Exp]:
+    
+    solver = z3.Solver()
+    shortened: List[Exp] = []
+    for elem in constraints:
+        smt_elem = to_smt(elem)
+        is_trivial = solver.check(z3.Not(smt_elem))
+        if is_trivial == z3.sat:
+            shortened.append(elem)
+        else:
+            assert is_trivial != z3.unknown
+
+    return shortened
