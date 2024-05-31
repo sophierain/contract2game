@@ -49,11 +49,11 @@ def add_ignore(tree: Tree, hist: List[str]):
     # print(hist)
     tracker = align_tracker(tree.tracker, "ignore", hist)
 
-    beh_case = []
-    preconditions = []
-    updates = []
-    split_constraints = []
-    smt_constraints = []
+    beh_case: List[Exp] = []
+    preconditions: List[Exp] = []
+    updates: List[Exp] = []
+    split_constraints: List[Exp] = []
+    smt_constraints: List[Boolean] = []
 
 
 
@@ -92,6 +92,7 @@ def align_hist(exp: Exp, hist: List[str]) -> Exp:
 
     if isinstance(exp, HistItem):
         # take care of loc for mappings
+        loc: StorageLoc
         if isinstance(exp.loc, MappingLoc):
             loc = MappingLoc(exp.loc.loc.copy_loc(), [align_hist(elem, hist) for elem in exp.loc.args])
         else:
@@ -253,7 +254,7 @@ def align_tracker(tracker: Tracker, name: str, hist: List[str]) -> Tracker:
                     assert hist[i] == elem.upstream[i], f"{hist} vs {elem.upstream}"
                 upstream = hist + [name] + elem.upstream[len(hist):]
             item = align_hist(elem.item, hist)
-            assert isinstance(item, HistItem) or isinstance(item, HistEnvVar) or isinstance(item, Player)
+            assert isinstance(item, HistItem) or isinstance(item, HistEnvVar) #or isinstance(item, Player)
             value = align_hist(elem.value, hist)
 
             new_tracker.append(TrackerElem(item, value, upstream))
@@ -262,7 +263,9 @@ def align_tracker(tracker: Tracker, name: str, hist: List[str]) -> Tracker:
                 new_value = elem.value.copy_exp()
             else:
                 new_value = elem.value
-            new_tracker.append(TrackerElem(elem.item.copy_exp(), new_value , [step for step in elem.upstream]))
+            new_exp: Exp = elem.item.copy_exp()
+            assert isinstance(new_exp, HistItem | HistEnvVar)
+            new_tracker.append(TrackerElem(new_exp, new_value , [step for step in elem.upstream]))
     return new_tracker
 
 

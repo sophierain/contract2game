@@ -61,6 +61,10 @@ class AntiMap(StorageLoc):
         arg_types = [type for type in self.arg_types]
 
         return AntiMap(loc, loa, arg_types)
+    
+    def to_string(self) -> str:
+        assert False, "antimaps should not be printed"
+        return 
 
 @dataclass
 class TrackerElem:
@@ -312,7 +316,7 @@ def init_tracker(updates: List[Exp], store: Storage) -> Tracker:
         assert isinstance(update, Eq)
         assert isinstance(update.left, HistItem)
         assert update.left.hist == []
-        item = update.left
+        item: HistItem = update.left
         value = update.right.copy_exp()
         upstream: List[str] = []
 
@@ -322,6 +326,7 @@ def init_tracker(updates: List[Exp], store: Storage) -> Tracker:
 
         for i in range(len(tracker)):
             t_item = tracker[i].item
+            assert isinstance(t_item, HistItem), "in init no HistEnvVar expected"
             if item.is_equiv(t_item):
                 assert is_new
                 is_new = False
@@ -351,7 +356,9 @@ def init_tracker(updates: List[Exp], store: Storage) -> Tracker:
             assert isinstance(new_item, HistItem)
             tracker.append(TrackerElem(new_item, value, upstream))
             # adapt loa of corresponding antimap
-            anti_map = tracker[antielem_index].item.loc
+            hitem = tracker[antielem_index].item
+            assert isinstance(hitem, HistItem)
+            anti_map = hitem.loc
             assert isinstance(anti_map, AntiMap)
             anti_map.extend_loa(item.loc.args)
 
@@ -717,13 +724,17 @@ def update_tracker(tracker: Tracker, updates: List[Exp], name: str) \
                 is_new = False
                 new_tracker[i].update_value(value)
                 new_tracker[i].update_upstream(upstream)
-            if isinstance(item.loc, MappingLoc):
-                if isinstance(t_item.loc, AntiMap):
-                    if t_item.loc.loc.is_equiv(item.loc.loc):
-                        antielem_index = i
+            if isinstance(item, HistItem):
+                if isinstance(item.loc, MappingLoc):
+                    if isinstance(t_item, HistItem):
+                        if isinstance(t_item.loc, AntiMap):
+                            if t_item.loc.loc.is_equiv(item.loc.loc):
+                                antielem_index = i
         
         if is_new:
-            assert isinstance(item.loc, MappingLoc)
+            new_item = item.copy_exp()
+            assert isinstance(new_item, HistItem)
+            assert isinstance(new_item.loc, MappingLoc)
 
             # print("tracker antimaps:")
             # for elem in tracker:
@@ -738,13 +749,14 @@ def update_tracker(tracker: Tracker, updates: List[Exp], name: str) \
 
             assert antielem_index > -1, f"antimap not initialized"
             # add new mapping instance to tracker 
-            new_item = item.copy_exp()
-            assert isinstance(new_item, HistItem)
+
             new_tracker.append(TrackerElem(new_item, value, upstream))
             # adapt loa and upstream of corresponding antimap
-            anti_map = new_tracker[antielem_index].item.loc
+            anti_map_item = new_tracker[antielem_index].item
+            assert isinstance(anti_map_item ,HistItem)
+            anti_map = anti_map_item.loc
             assert isinstance(anti_map, AntiMap)
-            anti_map.extend_loa(item.loc.args)
+            anti_map.extend_loa(new_item.loc.args)
 
     return new_tracker
     
@@ -836,7 +848,7 @@ def no_update(tracker: Tracker, updates: List[Exp]) -> List[Exp]:
     return constraints
 
 
-def noup_cons(noup: List[HistItem]) -> List[Exp]:
+def noup_cons(noup: List[HistItem | HistEnvVar]) -> List[Exp]:
 
     constraints: List[Exp] = []
     for elem in noup: 
@@ -937,6 +949,7 @@ def copy_tracker(tracker: Tracker) -> Tracker:
     for elem in tracker:
         upstream = [stri for stri in elem.upstream]
         item = elem.item.copy_exp()
+        value: Exp
         assert isinstance(item, HistItem) or isinstance(item, HistEnvVar)
         if isinstance(elem.value, Player): # players aren't copied
             value = elem.value
@@ -956,7 +969,7 @@ def copy_update_tracker(tracker: Tracker, name: str) -> Tracker:
         assert isinstance(item, HistItem) or isinstance(item, HistEnvVar) 
         if not isinstance(item, Player):
             item.hist.append(name)
-
+        value: Exp
         if isinstance(elem.value, Player): # players aren't copied
             value = elem.value
         else:

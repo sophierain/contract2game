@@ -16,12 +16,12 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
 
     else:
         # change to a while loop and remove the dictionary from the condition
-        iteration_list = [[child, child_tree] for child, child_tree in tree.children.items()]
+        iteration_list: List[Tuple[str, Tree]] = [(child, child_tree) for child, child_tree in tree.children.items()]
         i = 0
 
         while i < len(iteration_list):
             child = iteration_list[i][0]
-            child_tree = iteration_list[i][1]
+            child_tree: Tree = iteration_list[i][1]
             # call recursion first to proceed bottom up
             new_hist_incl_child = case_split(child_tree, new_hist + [child], entire_tree, players)
             new_hist = new_hist_incl_child[:-1]
@@ -35,6 +35,8 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
             split, splitting_point_candidate, case_condition = is_dependent(child_tree.beh_case + child_tree.preconditions,\
                                             child_tree.interface, new_hist_incl_child, entire_tree)
             if split:
+                assert splitting_point_candidate
+                assert case_condition
                 # we check if the case splitting point is the correct one
                 good_split = check_splitting_point(splitting_point_candidate, case_condition, entire_tree, players, new_hist_incl_child)
                 splitting_point = splitting_point_candidate
@@ -90,7 +92,7 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
             
             
             # rename current child accordingly in iteration_list, s.t. in the future not added
-            iteration_list[i][0] = new_child
+            iteration_list[i] = (new_child, iteration_list[i][1])
 
             # check which children are new and append these to iteration list
             to_add = []
@@ -105,7 +107,7 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
                     # print(new_child)
                     # print("iteration_list")
                     # print([elem[0] for elem in iteration_list])
-                    to_add.append([child, child_tree])
+                    to_add.append((child, child_tree))
 
 
             iteration_list.extend(to_add)
@@ -144,14 +146,6 @@ def compute_split_constraint(hist: List[str], condition: List[Exp], tree: Tree, 
 
     return split_constraint
 
-def caller_dep(constr: Exp, tracker: Tracker) -> bool:
-    pass
-
-def caller_split(tree: Tree, child: Tree, constr: Exp):
-    pass
-
-def hist_split(tree: Tree, child: Tree, constr: Exp):
-    pass
 
 def check_splitting_point(history: List[str], condition: List[Exp], tree: Tree, players: List[Player], dependent_hist: List[str]) -> bool:
     """checks whether a found splitting point in the tree was a good one in the sense that it actual a relevant split,
@@ -289,6 +283,7 @@ def adapt_hist(hist: List[str], name: str, exp: Exp) -> Exp:
     """
 
     if isinstance(exp, HistItem):
+        loc: StorageLoc
         # take care of loc for mappings
         if isinstance(exp.loc, MappingLoc):
             loc = MappingLoc(exp.loc.loc.copy_loc(), [adapt_hist(hist, name, elem) for elem in exp.loc.args])
@@ -433,6 +428,7 @@ def adapt_tracker(tracker_hist: List[str], name: str, tracker: Tracker) -> Track
 
     for elem in tracker:
         new_item = adapt_hist(tracker_hist, name, elem.item)
+        assert isinstance(new_item, HistItem | HistEnvVar)
         if len(elem.upstream) < len(tracker_hist):
             assert all([tracker_hist[i] == elem.upstream[i] for i in range(len(elem.upstream))] )
             new_upstream = elem.upstream

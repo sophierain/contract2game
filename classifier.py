@@ -98,7 +98,7 @@ def is_dependent(constraints: List[Exp], interface: List[Exp],
             print("sat, case split required")
             # in the foralls with the callers instead of players we have the history of all relevant variables
             possible_split_causes = additional_foralls + forall_vars
-            split_location = []
+            split_location: List[str] = []
             # pick longest history that is not the current one (cause we have to split above the current one)
             for cause in possible_split_causes:
                 if not isinstance(cause, Player):
@@ -338,18 +338,18 @@ def compute_prev_prec(tree: Tree, forall_vars: List[Exp], forall_player_vars: Li
         if elem in additional_player_foralls:
             additional_player_foralls.remove(elem)
 
-    rec_forall = []
-    rec_prec = []
-    rec_p_forall = []
+    rec_forall: List[Exp] = []
+    rec_prec: List[Exp] = []
+    rec_p_forall: List[Exp] = []
     if len(additional_foralls) > 0:
         rec_forall, rec_p_forall, rec_prec = compute_prev_prec(tree, additional_foralls, additional_player_foralls, starting_point_history)
 
     return additional_foralls + rec_forall, additional_player_foralls + rec_p_forall, additional_prec + rec_prec
 
 
-def player_constraints(players: Player) -> List[Exp]:
+def player_constraints(players: List[Player]) -> List[Exp]:
     """computes all inrange constraints and distinctness constraints for players"""
-    constraints = []
+    constraints: List[Exp] = []
     global ADDRESS_MAX
 
     # add inrange constraints

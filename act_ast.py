@@ -505,6 +505,8 @@ class Eq(Exp):
         return True
 
     def copy_exp(self)-> Exp:
+        left: Exp
+        right: Exp
         if isinstance(self.left, Player):
             left = self.left
         else:
@@ -536,6 +538,8 @@ class Neq(Exp):
         return True
 
     def copy_exp(self)-> Exp:
+        left: Exp
+        right: Exp
         if isinstance(self.left, Player):
             left = self.left
         else:
@@ -713,6 +717,8 @@ class Lt(Exp):
         return True
 
     def copy_exp(self)-> Exp:
+        left: Exp
+        right: Exp
         if isinstance(self.left, Player):
             left = self.left
         else:
@@ -745,6 +751,8 @@ class Le(Exp):
         return True
 
     def copy_exp(self)-> Exp:
+        left: Exp
+        right: Exp
         if isinstance(self.left, Player):
             left = self.left
         else:
@@ -777,6 +785,8 @@ class Gt(Exp):
         return True
 
     def copy_exp(self)-> Exp:
+        left: Exp
+        right: Exp
         if isinstance(self.left, Player):
             left = self.left
         else:
@@ -809,6 +819,8 @@ class Ge(Exp):
         return True
 
     def copy_exp(self)-> Exp:
+        left: Exp
+        right: Exp
         if isinstance(self.left, Player):
             left = self.left
         else:
@@ -948,7 +960,7 @@ class MappingLoc(StorageLoc):
     def to_string(self) -> str:
         arguments = ""
         for elem in self.args:
-            arguments = arguments + "," + elem.to_string
+            arguments = arguments + "," + elem.to_string()
         if len(arguments) > 0:
             arguments = arguments[1:]
         return self.loc.to_string() + "(" + arguments + ")"
