@@ -48,7 +48,17 @@ for tree in act_trees:
 # apply case splitting algorithm to all trees
 for tree in act_trees:
        _ = case_split(tree, [], tree, players)
+       print("\n")
+       print("case splitting done")
+       print("\n")
        tree.structure()
        print("\n")
 
-
+# apply player pruning to all trees
+for tree in act_trees:
+       player_pruning(tree, [], players)
+       print("\n")
+       print("player pruning done")
+       print("\n")
+       tree.structure()
+       print("\n")

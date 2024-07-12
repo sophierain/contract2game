@@ -243,7 +243,6 @@ def copy_subtree_without_dep_behav(tree: Tree, dep_behav_hist: List[str]) -> Tre
                 children, smt_constraints, interface)
 
 
-
 def remove_trivial_conditions(constraints: List[Exp]) -> List[Exp]:
     
     solver = z3.Solver()
@@ -257,3 +256,174 @@ def remove_trivial_conditions(constraints: List[Exp]) -> List[Exp]:
             assert is_trivial != z3.unknown
 
     return shortened
+
+
+def player_pruning(tree: Tree, hist: List[str], players: List[Player]):
+
+    for childname, child in tree.children.items():
+        player_pruning(child, hist+[childname], players)
+
+    to_remove: List[str] = []
+    for childname, child in tree.children.items():
+        assert isinstance(tree.player, Player)
+        to_be_removed = identify_obsolete_branches(childname, child, tree.children, players, tree.player, hist)
+        if to_be_removed:
+            to_remove.append(childname)
+
+    for elem in to_remove:
+        del tree.children[elem]
+
+    return
+
+def identify_obsolete_branches(name: str, branch: Tree, siblings: Dict[str, Tree], players: List[Player], previous_player: Player, hist: List[str]) -> bool:
+
+   
+    current_split_constraints = [shorten_history(elem, hist) for elem in branch.split_constraints]
+    player_cons = [to_smt(elem) for elem in player_constraints(players)]
+    solver = z3.Solver()
+
+    smt_current = [to_smt(elem) for elem in current_split_constraints]
+
+    current = z3.And(*player_cons, *smt_current)
+
+
+    for siblingname, sibling in siblings.items():
+        # don't compare to itself
+        if siblingname != name:
+            # only the ones with same behavior choice to be compared (same behaviour, equiv constraints, different player)
+            if siblingname.split("(")[0] == name.split("(")[0]:
+
+                sibling_constraints = [shorten_history(elem, hist) for elem in sibling.split_constraints]
+                smt_sibling = [to_smt(elem) for elem in sibling_constraints]
+                other = z3.And(*player_cons, *smt_sibling)
+                res = solver.check(z3.Not(current == other))
+
+                assert len(name.split("(")) >= 2, f"{name}"
+                assert len(siblingname.split("(")) >= 2, f"{siblingname}"
+                pre_current_player = name.split("(")[1]
+                pre_sibling_player = siblingname.split("(")[1]
+                assert len(pre_current_player.split(")")) >= 1
+                assert len(pre_sibling_player.split(")")) >= 1
+                current_player = pre_current_player.split(")")[0]
+                sibling_player = pre_sibling_player.split(")")[0]
+                # if current branch and sibling are equivalent, check which player has precedence according to the
+                # players list
+                if res == z3.unsat:
+                    
+                    if len(branch.children) == 0 :
+                        # if I am a leaf and the other is not I am obsolete
+                        if len(sibling.children) > 0:
+                            return True
+                        # if I am a leaf and the other is too, it depends on the "players":
+                        # if the current player has precendence over the sibling's player it's not necessarily obsolete
+                        # otherwise it is
+                        assert isinstance(previous_player, Player) 
+                        if not current_player_precedence(current_player, sibling_player, previous_player, players):
+                            return True   
+                    # if I am not a leaf, and the sibling is, I am not necesarily obsolete
+                    # if the sibling isn't a leaf either, it again depends on the player precedence
+                    elif len(sibling.children) > 0 :
+                        assert isinstance(previous_player, Player)                
+                        if not current_player_precedence(current_player, sibling_player, previous_player, players):
+                            return True
+
+    return False
+
+def current_player_precedence(current: str, sibling: str, previous: Player, players: List[Player]) -> bool:
+
+    assert previous in players, "unexpected player"
+    previous_index = players.index(previous)
+    # new precedence according to previous player
+    # is this the logic we want?
+    reshaped_players = [elem for elem in players[previous_index+1:]] + [elem for elem in players[:previous_index+1]]
+
+    current_index = find_player_in(current, reshaped_players)
+    sibling_index = find_player_in(sibling, reshaped_players)
+    assert current_index >= 0, "unexpected player"
+    assert sibling_index >= 0, "unexpected player"
+
+    if current_index < sibling_index:
+        return True
+    elif current_index == sibling_index:
+        assert False, "players should be distinct"
+    else:
+        return False
+
+def find_player_in(name: str, players: List[Player]) -> int:
+    for i in range(len(players)):
+        if players[i].name == name:
+            return i
+    return -1
+
+
+def shorten_history(exp: Exp, history: List[str]) -> Exp:
+    
+    res: Exp
+
+    # shorten history elements
+    if isinstance(exp, HistItem):
+        if len(exp.hist) == len(history) + 1:
+            res = HistItem(shorten_storage_loc(exp.loc, history), [elem for elem in exp.hist[:-1]], exp.type)
+    elif isinstance(exp, HistVar):
+        if len(exp.hist) == len(history) + 1:
+            res = HistVar(exp.name, [elem for elem in exp.hist[:-1]], exp.type)
+    elif isinstance(exp, HistEnvVar):
+         if len(exp.hist) == len(history) + 1:
+            res = HistEnvVar(exp.name, [elem for elem in exp.hist[:-1]], exp.type)
+
+    # call the function recursively for recursive exp
+    elif isinstance(exp, And):
+        res = And(shorten_history(exp.left, history), shorten_history(exp.right, history), exp.type)
+    elif isinstance(exp, Or):
+        res = Or(shorten_history(exp.left, history), shorten_history(exp.right, history), exp.type)
+    elif isinstance(exp, Not):
+        res = Not(shorten_history(exp.value, history),exp.type)
+    elif isinstance(exp, Eq):
+        res = Eq(shorten_history(exp.left, history), shorten_history(exp.right, history), exp.type)
+    elif isinstance(exp, Neq):
+        res = Neq(shorten_history(exp.left, history), shorten_history(exp.right, history), exp.type)
+    elif isinstance(exp, Add):
+        res = Add(shorten_history(exp.left, history), shorten_history(exp.right, history), exp.type)
+    elif isinstance(exp, Sub):
+        res = Sub(shorten_history(exp.left, history), shorten_history(exp.right, history), exp.type)
+    elif isinstance(exp, Mul):
+        res = Mul(shorten_history(exp.left, history), shorten_history(exp.right, history), exp.type)
+    elif isinstance(exp, Div):
+        res = Div(shorten_history(exp.left, history), shorten_history(exp.right, history), exp.type)
+    elif isinstance(exp, Pow):
+        res = Pow(shorten_history(exp.left, history), shorten_history(exp.right, history), exp.type)
+    elif isinstance(exp, Lt):
+        res = Lt(shorten_history(exp.left, history), shorten_history(exp.right, history), exp.type)
+    elif isinstance(exp, Le):
+        res = Le(shorten_history(exp.left, history), shorten_history(exp.right, history), exp.type)
+    elif isinstance(exp, Gt):
+        res = Gt(shorten_history(exp.left, history), shorten_history(exp.right, history), exp.type)
+    elif isinstance(exp, Ge):
+        res = Ge(shorten_history(exp.left, history), shorten_history(exp.right, history), exp.type)
+
+    # do nothing for the rest + assert some types not present
+    elif isinstance(exp, Player):
+        res = exp
+    else:
+        # assert not isinstance(exp, Implies)
+        # assert not isinstance(exp, ITE)
+        # assert not isinstance(exp, InRange)
+        # assert not isinstance(exp, Var)
+        # assert not isinstance(exp, EnvVar)
+        # assert not isinstance(exp, StorageItem)
+        # equivalent too:
+        assert isinstance(exp, Lit)
+        res = exp.copy_exp()
+
+    return res
+
+
+def shorten_storage_loc(loc: StorageLoc, history: List[str]) -> StorageLoc:
+
+    if isinstance(loc, VarLoc):
+        return loc.copy_loc()
+    elif isinstance(loc, ContractLoc):
+        return ContractLoc(shorten_storage_loc(loc.loc, history), loc.contract, loc.field)
+    else: 
+        assert isinstance(loc,MappingLoc)
+        return MappingLoc(shorten_storage_loc(loc.loc, history), [shorten_history(elem, history) for elem in loc.args])
