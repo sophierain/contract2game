@@ -265,6 +265,20 @@ It may be that the case splitting produces overlapping cases (e.g. call f with a
           1. the first is not implied by the second: skip and hope it gets rewritten in the future
           2. the first is implied by the second: add the negation of the second to the first
 
+## Removing the redundant Player branches step 3:
+
+After the case consistency transformations, we still have one branch per next possible choice and player (except for the ignore branches). However this way the previous player can choose who the next player will be, which does not mirror the smart contract. Hence we have to prune all but one player per choice.
+
+We do this in the following way:
+
+1. we compare siblings with equivalent constraints (hence same action, different player).
+
+2. if one of the siblings leads to a leaf and the other does not, we keep the one that is not a leaf (this player can still perform some action). Doing this differently leads to unsound behaviour. (some address can call another fct in the smart contract, then this should be mirrored in the game tree.)
+
+3. If none of the siblings is a leaf, we pick the player who is higher in the precedence ordering. We define the precedence ordering as follows: The player of the parent node fixes the starting point. Considering the ordered list of players, we pick the one sibling whose player is the closest neighbor on the right of the previous one. E.g. if we have players [A,B,C], the player of the parent node was B, and we are comparing equivalent siblings where one player is A the other is C, we give player C precendence, because the neighbors of B to the right are first C, then A.
+
+4. if both siblings are leafs, we proceed as in 3.
+
 ## Building the game tree step 3: apply utilities behav, existentially quantify "future dependencies" and  split in each upstream behav, (maybe top-down)
 
   1. rewrite constraint acc. to state tracker
