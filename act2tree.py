@@ -13,8 +13,7 @@ from state_tree import *
 from pest import *
 from sys import argv
 from case_splitting import *
-
-
+from collections.abc import Callable
 
 path = argv[1]
 
@@ -38,6 +37,14 @@ players = [Player("A", []), Player("B", [])]
 act_trees = []
 for considered_contract in act.find_maincontract():
        act_trees.append(contract2pest(considered_contract, extra_constraints, act.store, players))
+
+# called on each leaf node. takes a history of called methods and the state tracker at that leaf
+# returns a utility map
+UtilityFn = Callable[[List[Tuple[str,Player]], Tracker], Dict[Player, Exp]]
+
+def compute_utilities(UtilityFn, Tree):
+    pass
+
 
 
 # print player enhanced state trees (their structure)

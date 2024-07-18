@@ -78,8 +78,8 @@ class TrackerElem:
     def update_upstream(self, new_upstream: List[str]):
         self.upstream = new_upstream
 
+UtilityMap = Dict[Player, Exp]
 Tracker = List[TrackerElem]
-
 
 @dataclass
 class Tree:
