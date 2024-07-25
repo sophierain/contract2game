@@ -14,6 +14,7 @@ from pest import *
 from sys import argv
 from case_splitting import *
 from collections.abc import Callable
+from postprocessing import *
 
 path = argv[1]
 
@@ -32,19 +33,28 @@ act = parse_act_json(obj)
 
 act.to_cnf()
 
+#############################################################################################################################
+# USER DEFINED START
 players = [Player("A", []), Player("B", [])]
+
+# utility_fct: UtilityFn
+def utility_fct(arg1: List[Tuple[str,Player]], arg2: Tracker) -> Dict[str, Exp]:
+
+       p0: Exp = Lit(10, ActInt())
+       p1: Exp = Lit(0, ActInt())
+       utility = {players[0].name: p0 , players[1].name: p1}
+
+       return utility
+
+honest_histories: List[List[str]] = []
+
+# USER DEFINED END
+#############################################################################################################################
+
 
 act_trees = []
 for considered_contract in act.find_maincontract():
        act_trees.append(contract2pest(considered_contract, extra_constraints, act.store, players))
-
-# called on each leaf node. takes a history of called methods and the state tracker at that leaf
-# returns a utility map
-UtilityFn = Callable[[List[Tuple[str,Player]], Tracker], Dict[Player, Exp]]
-
-def compute_utilities(UtilityFn, Tree):
-    pass
-
 
 
 # print player enhanced state trees (their structure)
@@ -69,3 +79,8 @@ for tree in act_trees:
        print("\n")
        tree.structure()
        print("\n")
+
+
+# post-processing: compute utilities, collect constraints, generate json game tree
+for tree in act_trees:
+       store_json(tree, utility_fct, players, honest_histories)
