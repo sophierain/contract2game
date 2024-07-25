@@ -46,7 +46,7 @@ def utility_fct(arg1: List[Tuple[str,Player]], arg2: Tracker) -> Dict[str, Exp]:
 
        return utility
 
-honest_histories: List[List[str]] = []
+honest_histories: List[List[str]] = [["ignore(B)", "ignore(A)"]]
 
 # USER DEFINED END
 #############################################################################################################################
