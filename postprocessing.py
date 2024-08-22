@@ -42,7 +42,7 @@ def compute_utilities(utility_fct: UtilityFn, hist_and_player: List[Tuple[str, P
     return dsl_utility
 
 
-def store_json(tree: Tree, utility_fct: UtilityFn, players: List[Player], honest_histories: List[List[str]]):
+def store_json(tree: Tree, utility_fct: UtilityFn, players: List[Player], honest_histories: List[List[str]], output_name: str, tree_number: str):
     
     player_names = [pl.name for pl in players]
     PLAYERS.extend(dsl.players(*player_names))
@@ -61,7 +61,9 @@ def store_json(tree: Tree, utility_fct: UtilityFn, players: List[Player], honest
         COLLUSION_RESILIENCE_CONSTRAINTS,
         PRACTICALITY_CONSTRAINTS,
         HONEST_HISTORIES,
-        game_tree
+        game_tree,
+        output_name,
+        tree_number
     )
 
 def generate_game_tree(tree: Tree, utility_fct: UtilityFn, hist_and_player: List[Tuple[str, Player]]) ->  dsl.Tree:

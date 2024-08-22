@@ -10,7 +10,11 @@ class StringThing:
         self.value = value
 
     def __repr__(self):
-        return self.value
+        result = self.value.replace("(", "[")
+        result = result.replace(")", "]")
+        result = result.replace(",",";")
+        result = result.replace(".",":")
+        return result
 
     def __str__(self):
         return self.value
@@ -88,7 +92,11 @@ class NameExpr(Expr):
         self.name = name
 
     def __repr__(self):
-        return self.name
+        result = self.name.replace("(", "[")
+        result = result.replace(")", "]")
+        result = result.replace(",",";")
+        result = result.replace(".",":")
+        return result
 
 
 LExpr = Union[Expr, float, int]
@@ -434,28 +442,35 @@ def finish(
         practicality_constraints: List[Constraint],
         honest_histories: List[List[Action]],
         tree: Tree,
+        output_name: str,
+        tree_number: str
 ):
+    
+    # preprocessing: replace () with <> and , by . 
+
+
     import sys
     mode = sys.argv[1] if len(sys.argv) >= 2 else ''
-    if mode == 'graphviz':
-        print("digraph tree {")
-        tree.graphviz()
-        print("}")
-    else:
-        json.dump({
-            'players': players,
-            'actions': actions,
-            'infinitesimals': infinitesimals,
-            'constants': constants,
-            'initial_constraints': initial_constraints,
-            'property_constraints': {
-                'weak_immunity': weak_immunity_constraints,
-                'weaker_immunity': weaker_immunity_constraints,
-                'collusion_resilience': collusion_resilience_constraints,
-                'practicality': practicality_constraints
-            },
-            'honest_histories': honest_histories,
-            'tree': tree
-        }, default=lambda x: x.json(), fp=sys.stdout, indent=2)
+    with open(output_name + "_sefg" + tree_number + ".json", "w") as out_file:
+        if mode == 'graphviz':
+            print("digraph tree {")
+            tree.graphviz()
+            print("}")
+        else:
+            json.dump({
+                'players': players,
+                'actions': actions,
+                'infinitesimals': infinitesimals,
+                'constants': constants,
+                'initial_constraints': initial_constraints,
+                'property_constraints': {
+                    'weak_immunity': weak_immunity_constraints,
+                    'weaker_immunity': weaker_immunity_constraints,
+                    'collusion_resilience': collusion_resilience_constraints,
+                    'practicality': practicality_constraints
+                },
+                'honest_histories': honest_histories,
+                'tree': tree
+            }, out_file , default=lambda x: x.json(), indent=2)
 
     sys.exit(0)

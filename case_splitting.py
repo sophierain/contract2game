@@ -325,6 +325,10 @@ def identify_obsolete_branches(name: str, branch: Tree, siblings: Dict[str, Tree
                     elif len(sibling.children) > 0 :
                         assert isinstance(previous_player, Player)                
                         if not current_player_precedence(current_player, sibling_player, previous_player, players):
+                            name_wo_player = name.split("(")[0] + str(smt_current)
+                            actual_hist = hist + [name_wo_player]
+                            print("Possible source of incompleteness of tree structure. The input contains ambiguity with respect to the order of callers:")
+                            print(f"At history {actual_hist} it could be player {current_player}'s or player {sibling_player}'s turn.") 
                             return True
 
     return False

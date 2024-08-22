@@ -80,7 +80,12 @@ for tree in act_trees:
        tree.structure()
        print("\n")
 
+# TODO: enable user to provide honest history and utility function here
 
 # post-processing: compute utilities, collect constraints, generate json game tree
+assert len(path.split(".json")) > 0, "unexpected file extension"  
+output_name : str = path.split(".json")[0]
+i : int = 1
 for tree in act_trees:
-       store_json(tree, utility_fct, players, honest_histories)
+       store_json(tree, utility_fct, players, honest_histories, output_name, str(i))
+       i = i + 1
