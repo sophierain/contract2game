@@ -15,6 +15,7 @@ from sys import argv
 from case_splitting import *
 from collections.abc import Callable
 from postprocessing import *
+import ast
 
 path = argv[1]
 
@@ -33,9 +34,16 @@ act = parse_act_json(obj)
 
 act.to_cnf()
 
+players_string : str = input("Input players as list of strings according to precedence. E.g ['A','B'].\n")
+
+players_raw: List[str] = ast.literal_eval(players_string)
+players: List[Player] = []
+for elem in players_raw:
+       players.append(Player(elem, []))
+
+
 #############################################################################################################################
 # USER DEFINED START
-players = [Player("A", []), Player("B", [])]
 
 # utility_fct: UtilityFn
 def utility_fct(arg1: List[Tuple[str,Player]], arg2: Tracker) -> Dict[str, Exp]:
@@ -45,8 +53,6 @@ def utility_fct(arg1: List[Tuple[str,Player]], arg2: Tracker) -> Dict[str, Exp]:
        utility = {players[0].name: p0 , players[1].name: p1}
 
        return utility
-
-honest_histories: List[List[str]] = [["ignore(B)", "ignore(A)"]]
 
 # USER DEFINED END
 #############################################################################################################################
@@ -81,6 +87,14 @@ for tree in act_trees:
        print("\n")
 
 # TODO: enable user to provide honest history and utility function here
+hon_hist_string : str = input("Input honest histories as list of list of strings. E.g [['l','r'],['l','l']].\n")
+honest_histories: List[List[str]] = ast.literal_eval(hon_hist_string)
+assert (isinstance(honest_histories, list))
+assert(all([isinstance(elem, list) for elem in honest_histories]))
+assert([all(isinstance(action, str) for elem in honest_histories for action in elem)])
+
+# utility_fct
+
 
 # post-processing: compute utilities, collect constraints, generate json game tree
 assert len(path.split(".json")) > 0, "unexpected file extension"  
