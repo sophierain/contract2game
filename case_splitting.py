@@ -44,7 +44,7 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
                 while not good_split and len(splitting_point)>0:
                     splitting_point = splitting_point[:-1]
                     good_split = check_splitting_point(splitting_point, case_condition, entire_tree, players, new_hist_incl_child)
-
+                # May26 comment: optimize splitting point finding: keep track of all candidate splitting points from is_dependent
                 if good_split:
                     # print("splitting point")
                     # print(splitting_point)
@@ -54,6 +54,7 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
                     split_constraint = compute_split_constraint(splitting_point, case_condition, entire_tree, players)
                     split_constraint = remove_trivial_conditions(split_constraint) 
 
+                    # CONTINUE HERE for recapping algorithm
                     # copy the subtree after splitting_point, the original one tagged condition, the new one tagged not conditon
                     relative_dep_history = hist[len(splitting_point):] + [new_child]
                     child_neg = copy_subtree_without_dep_behav(walk_the_tree(entire_tree, splitting_point), relative_dep_history)
@@ -163,7 +164,7 @@ def check_splitting_point(history: List[str], condition: List[Exp], tree: Tree, 
     previous_constraints = collect_constraints(history, tree)
     # add assumptions that players are distinct and in range
     previous_constraints.extend(player_constraints(players))
-
+    # controlled collects all interface vars and callvalues from splitting candidate to where the dependency occured
     controlled = collect_controlled(dependent_hist[len(history):], walk_the_tree(tree, history), history)
 
     # translate all into SMT constraints

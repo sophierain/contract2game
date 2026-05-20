@@ -46,11 +46,43 @@ for elem in players_raw:
 # USER DEFINED START
 
 # utility_fct: UtilityFn
-def utility_fct(arg1: List[Tuple[str,Player]], arg2: Tracker) -> Dict[str, Exp]:
+def utility_fct(hist: List[Tuple[str,Player]], tracker: Tracker) -> Dict[str, Exp]:
 
-       p0: Exp = Lit(10, ActInt())
-       p1: Exp = Lit(0, ActInt())
-       utility = {players[0].name: p0 , players[1].name: p1}
+       uP: Exp = Sub( Lit(0, ActInt()), Lit("gas", ActInt())) # if it doesn't work try making "gas" a Var instead of a Lit
+       uC: Exp = Lit(0, ActInt())
+       uA: Exp = Lit(0, ActInt())
+       utility = {players[0].name: uP , players[1].name: uC, players[2].name: uA}
+
+
+       for player in players:
+              for elem in hist:
+                     if elem[1] == player and elem[0] != "ignore":
+                            # assuming hist has the chosen action+ the player who called it not the chosen action + the next player
+                            utility[player.name]= Sub(utility[player.name], Lit("gas", ActInt())) # if it doen't work try making "gas" a Var instead of a Lit
+
+       # possible issue here: player names in history actions vs no player names in history actions (double check) for just_hist and histories in the tracker
+       # if one has player names the other not, split the ones with player names on "(" to get the history without
+       just_hist: List[str] = [elem[0] for elem in hist]
+
+       # assuming the state in the JSON is called "State" and 0 = proposed,
+       # 1 = cancelled, 2 = accepted, 3 = executed
+
+       #checking if at current leaf the State is "executed"
+       for tracker_elem in tracker:
+              if tracker_elem.item is HistItem:
+                     if tracker_elem.item.loc is VarLoc:
+                            # looking at State
+                            if tracker_elem.item.loc.name == "State":
+                                   # looking at state for correct history
+                                   if tracker_elem.item.hist == just_hist:
+                                          # checking if state is executed
+                                          if tracker_elem.value.is_equiv(Lit(3, ActInt())):
+                                                 utility[players[0].name] = Add( utility[players[0].name], Lit("alpha", ActInt()))
+                                                 utility[players[1].name] = Add( utility[players[1].name], Lit("beta", ActInt()))
+
+       # note: that is not very pleasant to write... we should improve this in the reimplementation (making it z3 bools?) or at least simplifying accesing the tracker at the current history
+
+       # another note: how to insert preconditions on the newly introduced values?, as additional input paramter or as part of the act spec? or in an entirely different way? 
 
        return utility
 

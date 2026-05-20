@@ -460,6 +460,7 @@ def generate_tree(
     for behv in behvs:
         child_name = behv.name + "__" + to_node_name(behv.caseConditions)
         # naive breaking condition: no 2 functions (behavior) can be called twice
+        # MAY26 comment: shouldn't we lift this constraint?
         if not child_name in history:
             # apply behaviour already returns the hist versions of vars and storage
             child_tracker, child_prec, child_updates, child_case = \

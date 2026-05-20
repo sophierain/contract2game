@@ -59,7 +59,7 @@ def is_dependent(constraints: List[Exp], interface: List[Exp],
     prev_prec.extend(player_constraints(quant_players))
 
 
-    # only proceed if there are problematic variables, otherwise trivially no case split required
+    # only proceed if there are problematic variables (i.e. forall_vars), otherwise trivially no case split required
     if len(final_forall)>0:
         # translate to smt
         smt_exists = [to_smt(var) for var in exists_vars]
@@ -354,7 +354,7 @@ def player_constraints(players: List[Player]) -> List[Exp]:
 
     # add inrange constraints
     for player in players:
-        constraints.append(Le(Lit(0, ActInt()), player))
+        constraints.append(Le(Lit(0, ActInt()), player)) # May26 comment: probably address 0 is not allowed, double-check for reimplementation
         constraints.append(Le(player, Lit(ADDRESS_MAX, ActInt())))
     # add distinctness constraints for all pairs of players
     player_pairs = itertools.combinations(players, 2)
