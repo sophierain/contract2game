@@ -47,6 +47,7 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
                 # May26 comment: optimize splitting point finding: keep track of all candidate splitting points from is_dependent
                 if good_split:
                     # print("splitting point")
+
                     # print(splitting_point)
 
                     # compute the condition to be added to the splitting point node (i.e. remove player in range constraints and
@@ -54,7 +55,6 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
                     split_constraint = compute_split_constraint(splitting_point, case_condition, entire_tree, players)
                     split_constraint = remove_trivial_conditions(split_constraint) 
 
-                    # CONTINUE HERE for recapping algorithm
                     # copy the subtree after splitting_point, the original one tagged condition, the new one tagged not conditon
                     relative_dep_history = hist[len(splitting_point):] + [new_child]
                     child_neg = copy_subtree_without_dep_behav(walk_the_tree(entire_tree, splitting_point), relative_dep_history)
@@ -76,7 +76,8 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
                     adapt_tree(splitting_point, child_name_pos, child_pos)
 
                     # TO DO adapt names of histories in histitems, upstreams etc,
-                    # for both branches: childname and splitting_point[-1] (which still has to be changed to splitting_point[-1]+ str(split_constraint))
+                    # for both branches: childname and splitting_point[-1] (which still has to be changed to splitting_point[-1]+ str(split_constraint)) 
+                    # May26 comment: seems to be done in adapt_tree, but double check
 
                     subtree = walk_the_tree(entire_tree, splitting_point[:-1])
                     subtree.children[child_name_pos] = subtree.children.pop(splitting_point[-1])
@@ -87,6 +88,7 @@ def case_split(tree: Tree, hist: List[str], entire_tree: Tree, players: List[Pla
                     new_hist = splitting_point[:-1] + [child_name_pos] + new_hist[len(splitting_point):]
                  
                 else: # implement this later
+                    # May26 Comment: this is the point Sophie meant for a condition node at the root
                     print("Warning: need another tree")
                     # for now just in the split conditions of the root
                     entire_tree.split_constraints.extend(case_condition)
@@ -328,6 +330,7 @@ def identify_obsolete_branches(name: str, branch: Tree, siblings: Dict[str, Tree
                         if not current_player_precedence(current_player, sibling_player, previous_player, players):
                             name_wo_player = name.split("(")[0] + str(smt_current)
                             actual_hist = hist + [name_wo_player]
+                            # May26 comment: here we could have an uncontrollable conditional node with a dummy condition to keep both options)
                             print("Possible source of incompleteness of tree structure. The input contains ambiguity with respect to the order of callers:")
                             print(f"At history {actual_hist} it could be player {current_player}'s or player {sibling_player}'s turn.") 
                             return True
