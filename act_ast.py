@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Union, Generator
 
 
@@ -314,7 +314,7 @@ class ActByteStr(ActType):
 class Player(Exp):
     name: str
     constraints: List[Exp]
-    type: ActType = ActInt()
+    type: ActType = field(default_factory=ActInt)
 
     def copy_exp(self) -> Exp:
         print("WARNING: players should not be copied!")
@@ -349,7 +349,7 @@ class Lit(Exp):
 @dataclass
 class Var(Exp):
     name: str
-    type: ActType
+    type: SlotType
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Var):
@@ -371,7 +371,7 @@ class And(Exp):
     """conjunction of two boolean expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, And):
@@ -395,7 +395,7 @@ class Or(Exp):
     """disjunction of two boolean expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Or):
@@ -418,7 +418,7 @@ class Or(Exp):
 class Not(Exp):
     """Negation of a boolean expression"""
     value: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Not):
@@ -440,7 +440,7 @@ class Implies(Exp):
     """implication of two boolean expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Implies):
@@ -491,7 +491,7 @@ class ITE(Exp):
 class Eq(Exp):
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Eq):
@@ -524,7 +524,7 @@ class Eq(Exp):
 class Neq(Exp):
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Neq):
@@ -557,7 +557,7 @@ class Neq(Exp):
 class InRange(Exp):
     expr: Exp
     abitype: AbiType # only allow (int, uint, address, string) 
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, InRange):
@@ -582,7 +582,7 @@ class Add(Exp):
     """addition of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActInt()
+    type: ActType = field(default_factory=ActInt)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Add):
@@ -606,7 +606,7 @@ class Sub(Exp):
     """subtraction of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActInt()
+    type: ActType = field(default_factory=ActInt)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Sub):
@@ -630,7 +630,7 @@ class Mul(Exp):
     """multiplication of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActInt()
+    type: ActType = field(default_factory=ActInt)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Mul):
@@ -654,7 +654,7 @@ class Div(Exp):
     """division of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActInt()
+    type: ActType = field(default_factory=ActInt)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Div):
@@ -678,7 +678,7 @@ class Pow(Exp):
     """division of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActInt()
+    type: ActType = field(default_factory=ActInt)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Pow):
@@ -703,7 +703,7 @@ class Lt(Exp):
     """less than comparison of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Lt):
@@ -737,7 +737,7 @@ class Le(Exp):
     """less than or equal comparison of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Le):
@@ -771,7 +771,7 @@ class Gt(Exp):
     """greater than comparison of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Gt):
@@ -805,7 +805,7 @@ class Ge(Exp):
     """greater than or equal comparison of two integer expressions"""
     left: Exp
     right: Exp
-    type: ActType = ActBool()
+    type: ActType = field(default_factory=ActBool)
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, Ge):
@@ -864,7 +864,7 @@ class StorageItem(Exp):
     """This is TItem in TimeAgnostic.hs"""
     loc: StorageLoc
     time: Timing
-    type: ActType
+    type: ActType 
 
     def is_equiv(self, other: Exp) -> bool:
         if not isinstance(other, StorageItem):
@@ -1154,15 +1154,15 @@ def base_case(exp: Exp) -> Exp:
                    exp.right.copy_exp(), exp.type)
     
     elif isinstance(exp, InRange): 
-        if isinstance(InRange.abitype, AbiIntType):
-            min = -2**(InRange.abitype.size -1)
-            max = 2**(InRange.abitype.size -1) -1
-        elif isinstance(InRange.abitype, AbiUIntType):
-            min = 0
-            max = (2**InRange.abitype.size) -1
-        elif isinstance(InRange.abitype, AbiAddressType):
-            min = 0
-            max = (2**256) -1
+        if isinstance(exp.abitype, AbiIntType):
+            min : Lit = Lit(-2**(exp.abitype.size -1), ActInt())
+            max : Lit = Lit(2**(exp.abitype.size -1) -1, ActInt())
+        elif isinstance(exp.abitype, AbiUIntType):
+            min : Lit = Lit(0, ActInt())
+            max : Lit = Lit((2**exp.abitype.size) -1, ActInt())
+        elif isinstance(exp.abitype, AbiAddressType):
+            min : Lit = Lit(0, ActInt())
+            max : Lit = Lit((2**256) -1, ActInt())
         else:
             assert False, "unsupported abitype for inrange"
         return And(Le(min, exp.expr), Le(exp.expr, max))

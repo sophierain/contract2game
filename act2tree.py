@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from act_ast import *
-from parse_act import parse_act_json, parse_constraints_json
+from parse_act_2 import parse_act_json, parse_constraints_json
 from state_tree import *
 from pest import *
 from sys import argv
