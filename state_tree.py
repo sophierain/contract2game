@@ -330,7 +330,6 @@ def init_tracker(updates: List[Exp], store: Storage) -> Tracker:
         is_new = True 
         # only applies to mappingloc and is true iff the args are seen the first time
         antielem_index = -1
-
         for i in range(len(tracker)):
             t_item = tracker[i].item
             assert isinstance(t_item, HistItem), "in init no HistEnvVar expected"
@@ -344,6 +343,7 @@ def init_tracker(updates: List[Exp], store: Storage) -> Tracker:
                         antielem_index = i
         
         if is_new:
+            print(type(item.loc))
             assert isinstance(item.loc, MappingLoc)
 
             # print(" init tracker antimaps:")
@@ -394,7 +394,6 @@ def to_hist(hist: List[str], exp: Exp) -> Exp:
             return HistItem(exp_locm, item_hist, exp.type)
         else:
             exp_loc = exp.loc.copy_loc()
-        
             return HistItem(exp_loc, item_hist, exp.type)
     
     elif  isinstance(exp, Var):
@@ -608,6 +607,7 @@ def to_smt( exp: Exp) -> Integer | Boolean | String:
         both_bool = isinstance(exp.left.type, ActBool) and isinstance(exp.right.type, ActBool)
         both_int = isinstance(exp.left.type, ActInt) and isinstance(exp.right.type, ActInt)
         both_bytestr = isinstance(exp.left.type, ActByteStr) and isinstance(exp.right.type, ActByteStr)
+        print(exp.left, exp.right)
         assert both_bool or both_int or both_bytestr, "left and right have to be of the same type"
         # possibly a no update function constraint
         if isinstance(exp.left, HistItem):

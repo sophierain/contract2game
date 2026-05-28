@@ -168,7 +168,6 @@ def parse_constructor(ctor: Dict)-> Constructor:
     assert "invariants" in ctor, "Missing 'invariants' key"
     assert "preConditions" in ctor, "Missing 'preConditions' key"
     assert "postConditions" in ctor, "Missing 'postConditions' key"
-
     return Constructor(
                         parse_interface(ctor["interface"], ctor["contract"]),
                         [parse_constructor_case(elem) for elem in ctor["cases"][0]["body"] ], 
@@ -241,7 +240,7 @@ def parse_decl(decl: Dict) -> Decl:
 
 
 def parse_boolexp(boolexp: Dict) -> Exp:
-    res = parse_exp(boolexp)
+    res = parse_exp(boolexp, ActBool())
     assert res.type == ActBool(), "not a boolean expression"
     return res
 
@@ -252,7 +251,7 @@ def parse_intexp(intexp: Dict) -> Exp:
     return res
 
 
-def parse_exp(exp: Dict) -> Exp:
+def parse_exp(exp: Dict, svartype = ActInt()) -> Exp:
     # print(exp)
     # print(type(exp))
     keys = exp.keys()
@@ -296,7 +295,8 @@ def parse_exp(exp: Dict) -> Exp:
                 assert "contract" in exp["var"], "Missing 'contract' key"
                 assert "svar" in exp["var"], "Missing 'svar' key"
                 assert "time" in exp["var"], "Missing 'time' key"
-                return StorageItem(VarLoc(exp["var"]["contract"], exp["var"]["svar"]), exp["var"]["time"], None) # type of storage item is not known at this point, will be filled in later
+                print("storage item parsed:", StorageItem(VarLoc(exp["var"]["contract"], exp["var"]["svar"]), exp["var"]["time"], svartype))
+                return StorageItem(VarLoc(exp["var"]["contract"], exp["var"]["svar"]), exp["var"]["time"], svartype) # type of storage item is not known at this point, will be filled in later
             elif "var" in exp["var"].keys():
                 # local variable
                 assert "abitype" in exp["var"].keys(), "Missing 'abitype' key"
@@ -492,6 +492,16 @@ def parse_constructor_case(initstore: Dict) ->  Exp:
     assert "contract" in initstore["location"], "Missing 'contract' key"
 
     init_store_value = parse_exp(initstore["value"])
+    print("left:", initstore["location"])
+    print("right:", initstore["value"])
+    print("parsed right:", init_store_value)
+    if "var" in initstore["value"].keys():
+        if "abitype" in initstore["value"]["var"].keys():
+            abitype = parse_abitype(initstore["value"]["var"]["abitype"]["abitype"])
+            if abitype == AbiBoolType():
+                init_store_value.type = ActBool()
+            else:
+                init_store_value.type = ActInt()
 
     return Eq(
             StorageItem(
